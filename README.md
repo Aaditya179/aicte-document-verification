@@ -6,6 +6,8 @@ ProofPath AI turns the documents of an AICTE application into one traceable case
 
 > Advisory only: final decisions rest with the competent authority.
 
+> **Being rebuilt to the build spec.** The product is built phase by phase from [`ProofPath AI Build Spec for Claude Code.md`](ProofPath%20AI%20Build%20Spec%20for%20Claude%20Code.md). Every deviation from it, mostly to keep the shared Supabase project safe for Nirikshan, is recorded in [`ASSUMPTIONS.md`](ASSUMPTIONS.md). Phase 0 (setup) is done. The data model, roles and setup steps below describe the earlier version and change in phase 1.
+
 ---
 
 ## Relationship to Nirikshan

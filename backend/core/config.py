@@ -1,6 +1,7 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from datetime import date
+from typing import Literal, Optional
 
 
 class Settings(BaseSettings):
@@ -28,8 +29,16 @@ class Settings(BaseSettings):
 
     # Documents: a private bucket of ProofPath's own, separate from Nirikshan's
     STORAGE_BUCKET: str = "proofpath-documents"
-    MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024
+    MAX_UPLOAD_MB: int = 15
+    MAX_PAGES: int = 50
     SIGNED_LINK_TTL_SECONDS: int = 300
+
+    # Scanned pages are read with Tesseract only when it is installed and this is on
+    OCR_ENABLED: bool = False
+
+    # The date checks compare against. `fixed` uses AS_OF_DATE so demos give the same results every day
+    AS_OF_DATE_MODE: Literal["today", "fixed"] = "today"
+    AS_OF_DATE: Optional[date] = None
 
     # Login lockout
     LOGIN_MAX_FAILURES: int = 5
@@ -40,6 +49,17 @@ class Settings(BaseSettings):
     def _no_trailing_slash(cls, v: str) -> str:
         # Browsers send Origin without a trailing slash
         return v.strip().rstrip("/")
+
+    @field_validator("AS_OF_DATE", mode="before")
+    @classmethod
+    def _blank_date_is_none(cls, v):
+        return None if v in ("", None) else v
+
+    @model_validator(mode="after")
+    def _fixed_mode_needs_a_date(self):
+        if self.AS_OF_DATE_MODE == "fixed" and self.AS_OF_DATE is None:
+            raise ValueError("AS_OF_DATE_MODE=fixed needs AS_OF_DATE (YYYY-MM-DD)")
+        return self
 
     @property
     def mfa_enforced_emails(self) -> set:

@@ -1,8 +1,14 @@
 # ProofPath AI
 
-Smart India Hackathon problem statement **SIH26261**. ProofPath AI turns the documents of an AICTE application into one traceable case file that shows what is **verified**, what **conflicts** and what is **unverified**, and why. It also catches **patterns across institutions** (the same land parcel, faculty member or document in more than one application) that checking one application at a time cannot see.
+Smart India Hackathon problem statement **SIH26261**. ProofPath AI is an evidence-first validation layer beside the AICTE approval workflow. It reads every document of an application, checks the claims against versioned rules and against each other, compares claims across institutions (the same faculty member, photo, certificate number or land survey number in more than one application), and gives the reviewer a case file in which every finding links to its document, page and value.
 
-Every finding is advisory: officers confirm or overrule it, and the decision stays with them. Each finding must point to the document, page and line it rests on.
+Every finding is decision support only. Reviewers resolve, dismiss or request evidence with a reason; the administrative decision always reads "Pending (authorised AICTE official)" and nothing can change it.
+
+## Build spec and plan
+
+- **`ProofPath AI Build Spec for Claude Code.md` is the source of truth.** Section 1.2 (principles) wins over everything, then sections 6 to 10 (logic).
+- **`ASSUMPTIONS.md` records every deviation from the spec** (mainly: `proofpath` schema instead of `pp_` tables, roles `institution`/`reviewer`/`rule_admin`, no browser table access, Next 16 and Tailwind 4, Groq only). Read it before building; add to it when choosing anything the spec leaves open.
+- **Build one phase at a time (spec section 15) and stop after each one.** Report what was done and how it was verified, then wait. The user verifies and pushes, and says when to start the next phase.
 
 ## Sister project: Nirikshan
 
@@ -19,27 +25,22 @@ ProofPath was started on 2026-10-28 from **Nirikshan** (SIH26262, AICTE approval
 
 ## Status
 
-**Built:**
-- Schema `supabase/migrations/0001_proofpath_schema.sql` with institutions, members, cases, documents, facts, checks, patterns, an append-only hash-chained audit_log, and the storage bucket. As of 2026-10-28 it was **not yet applied**, and `proofpath` was not yet an exposed schema.
-- Backend:
-  - login with rate limiting and lockout (`routers/auth.py`) and `/me`;
-  - `GET /cases`, `GET /cases/{id}` (checks with their facts, the documents, a summary count, and patterns that touch the case), and `GET /patterns`;
-  - `GET /audit/verify`;
-  - `services/llm.py` (Groq `_complete`, failsafe key, JSON schema checking).
-- Frontend: welcome, login (one-click demo roles), MFA, `/dashboard` (case files sorted by conflicts), `/cases/[id]` (the case file), `/patterns`.
-- Seed: `seed/demo.py` creates 5 demo accounts, 2 institutions, 2 case files (verified, conflict and unverified findings) and 1 `same_land_parcel` pattern on survey no. 112/3.
+**Phase 0 (setup) done on 28/10/2026.** The next step is phase 1 (foundation).
 
-**Not built yet:** document upload, reading facts from documents (OCR or LLM), the rule engine that turns facts into checks, the job that finds patterns across institutions, officer review (confirming or overruling a finding, with an audit entry), and deployment.
+What exists comes from an earlier model, built before the spec. Phase 1 replaces it:
+- Migration `0001_proofpath_schema.sql` (cases, facts, checks, patterns). It was **never applied**, so phase 1 rewrites it in place with the spec's tables in the `proofpath` schema. `proofpath` is not yet an exposed schema.
+- Backend parts to keep: login with rate limiting and lockout (`routers/auth.py`), `/me`, MFA (`core/security.py`), `services/audit.py` (hash chain), `services/llm.py` (Groq with failsafe key), and `core/config.py`, which has the spec's upload, OCR and as-of date settings.
+- Parts to replace: `routers/cases.py`, `seed/demo.py`, and the pages `/dashboard`, `/cases/[id]` and `/patterns`. The welcome, login and MFA pages are reworked.
 
 ## Roles
 
+These are the target roles from phase 1 on (spec section 4, `ASSUMPTIONS.md` D5). Until then the code still uses the old five.
+
 | Role | Access |
 | :--- | :--- |
-| `institution` | Its own case files only (another institution's case reads as 404) |
-| `verifier` | All case files and patterns; reviews findings. Needs MFA |
-| `analyst` | Patterns and case files. Needs MFA |
-| `auditor` | Read-only |
-| `admin` | Accounts only, **no case data** |
+| `institution` | Its own institution's applications and documents. Sees only its own `evidence_requested` findings, never cross-institution ones. Another institution's application reads as 404 |
+| `reviewer` | All applications, findings and cross-institution flags. Runs validation; resolves, dismisses or requests evidence. Needs MFA |
+| `rule_admin` | Rules, checklists and settings; reads everything else. The approver of a rule must differ from its author. Needs MFA |
 
 MFA is TOTP (aal2). `DEMO_MFA_BYPASS=true` in the local `.env` skips it for demo accounts.
 
@@ -63,9 +64,11 @@ The ports differ from Nirikshan's (8000 and 3000) so both run side by side. Demo
 - **Frontend:** Next.js 16 App Router with **Cache Components on**, React 19, TypeScript strict, Tailwind 4, lucide-react.
   - `useParams` and `useSearchParams` must be inside `<Suspense>`.
   - Don't call `new Date()` during render or prerender; it breaks the build. Compute dates in effects or callbacks.
-- **Look:** the cream and terracotta palette is intended. Use `#C25E26` (hover `#A84A19`), the light accent `#FBF0E4`, borders `#E8E2D8`, and the background `#FAF7F2` with the grid texture; headings in serif. Reuse `components/ui.tsx` (`PageShell`, `Notice`, `Badge`, `card`, buttons, `formatDate`) and `Brand`.
+- **Look:** the cream and terracotta palette is intended (`design/README.md`): accent `#C25E26` (hover `#A84A19`), light accent `#FBF0E4`, borders `#E8E2D8`, background `#FAF7F2` with the grid texture, headings in serif. Define colours once as tokens in `globals.css` and use only token names in components, never hex values (spec section 13). Every page shows the prototype banner, and status meaning never relies on colour alone. Reuse `components/ui.tsx` (`PageShell`, `Notice`, `Badge`, `card`, buttons, `formatDate`) and `Brand`.
 - **Dates:** shown as dd/mm/yyyy everywhere (`formatDate`, `formatDateTime`).
 - **Writing style:** plain language and sentence-case headings, with no jargon or all-caps headings.
+- **Words:** never state fraud, forged or fake, and never use approve or reject about an institution or application. Say conflict, mismatch, flag or candidate for review. Findings say what differs and where, never what it implies.
+- **Checks are plain Python, never an LLM** (dates, IDs, counts, hashes, areas, rules). Low-confidence or ambiguous values go to `needs_confirmation`, never resolved silently. Everything simulated is labelled MOCK; all data is synthetic.
 - **Backend:** FastAPI, Pydantic 2, and supabase-py with the service role. Use the `require_role([...])` dependency on every route.
 - **LLM:** Groq only (`GROQ_API_KEY` and `GROQ_API_KEY_FAILSAFE`). **Do not use the Anthropic API key.** Every AI feature needs a rule-based fallback for when `_complete` returns None, and must not state facts or numbers that aren't in the record.
 - **Secrets:** don't read or print values from `backend/.env` or `frontend/.env.local`; both are git-ignored.
