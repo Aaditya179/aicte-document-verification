@@ -145,9 +145,44 @@ class FakeDB:
 
     def rpc(self, fn, params=None):
         if fn == "audit_append":
-            self.audit.append(params)
-            return SimpleNamespace(execute=lambda: SimpleNamespace(data=len(self.audit)))
-        return SimpleNamespace(execute=lambda: SimpleNamespace(data={"ok": True, "events_checked": len(self.audit), "broken_at_id": None}))
+            import hashlib, json
+            from datetime import datetime, timezone
+            ts = datetime.now(timezone.utc).isoformat()
+            prev = self.audit[-1]["event_hash"] if self.audit else "GENESIS"
+            detail_str = json.dumps(params.get("p_detail")) if params.get("p_detail") is not None else ""
+            payload = f"{prev}|{params.get('p_actor') or ''}|{params.get('p_role') or ''}|{params.get('p_type')}|{params.get('p_entity_type') or ''}|{params.get('p_entity_id') or ''}|{params.get('p_app') or ''}|{detail_str}|{ts}"
+            h = hashlib.sha256(payload.encode()).hexdigest()
+            row = {
+                **params,
+                "id": len(self.audit) + 1,
+                "actor_id": params.get("p_actor"),
+                "actor_role": params.get("p_role"),
+                "event_type": params.get("p_type"),
+                "entity_type": params.get("p_entity_type"),
+                "entity_id": params.get("p_entity_id"),
+                "application_id": params.get("p_app"),
+                "detail": params.get("p_detail"),
+                "created_at": ts,
+                "prev_hash": prev,
+                "event_hash": h,
+            }
+            self.audit.append(row)
+            self.store.setdefault("audit_events", []).append(row)
+            return SimpleNamespace(execute=lambda: SimpleNamespace(data=row["id"]))
+        if fn == "audit_verify":
+            rows = self.store.get("audit_events", self.audit)
+            prev = "GENESIS"
+            for r in rows:
+                if r.get("prev_hash") != prev:
+                    return SimpleNamespace(execute=lambda: SimpleNamespace(data={"ok": False, "events_checked": len(rows), "broken_at_id": r["id"]}))
+                import hashlib, json
+                detail_str = json.dumps(r.get("detail")) if r.get("detail") is not None else ""
+                payload = f"{r.get('prev_hash')}|{r.get('actor_id') or ''}|{r.get('actor_role') or ''}|{r.get('event_type')}|{r.get('entity_type') or ''}|{r.get('entity_id') or ''}|{r.get('application_id') or ''}|{detail_str}|{r.get('created_at')}"
+                expected = hashlib.sha256(payload.encode()).hexdigest()
+                if r.get("event_hash") != expected:
+                    return SimpleNamespace(execute=lambda: SimpleNamespace(data={"ok": False, "events_checked": len(rows), "broken_at_id": r["id"]}))
+                prev = r.get("event_hash")
+            return SimpleNamespace(execute=lambda: SimpleNamespace(data={"ok": True, "events_checked": len(rows), "broken_at_id": None}))
 
     def rows(self, name):
         return self.store.get(name, [])

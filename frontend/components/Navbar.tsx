@@ -15,8 +15,16 @@ type NavLink = { href: string; label: string };
 // Each role sees only the pages it can use
 const NAV_LINKS: Record<Role, NavLink[]> = {
   institution: [{ href: '/institution', label: 'Your applications' }],
-  reviewer: [{ href: '/review', label: 'Review queue' }, { href: '/review/cross', label: 'Across institutions' }],
-  rule_admin: [{ href: '/admin/rules', label: 'Rules' }, { href: '/admin/settings', label: 'Settings' }],
+  reviewer: [
+    { href: '/review', label: 'Review queue' },
+    { href: '/review/cross', label: 'Across institutions' },
+    { href: '/audit', label: 'Audit log' },
+  ],
+  rule_admin: [
+    { href: '/admin/rules', label: 'Rules' },
+    { href: '/admin/settings', label: 'Settings' },
+    { href: '/audit', label: 'Audit log' },
+  ],
 };
 
 const HIDDEN_ON = ['/login', '/welcome', '/mfa'];

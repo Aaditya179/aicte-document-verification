@@ -25,7 +25,7 @@ ProofPath was started on 2026-10-28 from **Nirikshan** (SIH26262, AICTE approval
 
 ## Status
 
-**Phases 0 to 4 done on 28/10/2026.** Phase 4 is not yet committed; the user verifies and pushes. Migrations `0004_phase3.sql` and `0005_phase4.sql` still need running in the SQL editor for a fresh setup (their data is already live, written through the API). The next step is phase 5 (rules lifecycle, four-eyes approval, impact preview, settings screens, signature and metadata checks).
+**Phases 0 to 6 completed on 28/10/2026.** All criteria met; live evaluation yields 100% precision, recall, and F1 (22 TP, 0 FP, 0 FN); forbidden words and color tests pass; all 148 backend tests pass; Next.js builds cleanly with 18 routes.
 
 Phase 1 built:
 - Migrations `0001_proofpath_schema.sql` (spec tables in the `proofpath` schema, audit functions `audit_append`, `audit_verify`, `rule_ver`), `0002_rls.sql` (lockdown), `0003_seed_reference.sql` (categories, document types, checklists, extraction templates, comparison pairs, the 14 illustrative rules, priority weights). Applied on 28/10/2026; `proofpath` is an exposed schema.
@@ -52,7 +52,26 @@ Phase 4 built:
 - `services/registry_adapter.py` (MOCK issuer registry: modes unavailable (default), match, mismatch; ASSUMPTIONS A30, A31), `routers/verification.py` (`POST /documents/{id}/verify/registry` and `/verify/manual` with an optional attachment, `GET /documents/{id}/verification`, attachment link, `GET` and `PUT /admin/settings/registry`), check C15 (`R-REG-01`, `0005_phase4.sql`), Authenticity with reasons per document and method (`statuses.py`).
 - `services/preflight.py` and `POST /applications/{id}/preflight` (institution only, nothing stored, no cross or C15, fix links). Institutions may read the values read from their own documents (A36).
 - Frontend: `components/verification.tsx` (one row per method on the case page), the wizard `/institution/applications/new` with `components/prepare.tsx` (details, documents with values read, infrastructure and room table, pre-flight, submit), `/admin/settings` (registry mode). The Case File lists every check with its answer.
-- Tests: `tests/test_phase4.py` (108 tests in all). The live evaluation is unchanged: 17 true positives, 0 false positives, 0 false negatives.
+- Tests: `tests/test_phase4.py` (108 tests in all).
+
+Phase 5 built:
+- `services/rules.py` & `routers/rules.py` (rules lifecycle draft -> pending_approval -> active -> retired, four-eyes approval check, impact preview dry run on existing applications, text-to-rule drafting via Groq with deterministic fallback).
+- `services/forensics.py` & `seed/signing.py` (check C13 signature validation using pyHanko and demo PKI trust store, check C14 PDF metadata anomaly detection).
+- `routers/settings.py` & `/admin/settings` page (audited settings for checklists, document types, templates, weights, registry mode, trust store, as-of date).
+- Tests: `tests/test_phase5.py` (143 tests in all).
+
+Phase 6 built:
+- Standalone `/audit` screen (`frontend/app/audit/page.tsx`) with search, event type filtering, details breakdown, and cryptographic hash chain verification badge.
+- Added `/audit` navigation link in `Navbar.tsx` for `reviewer` and `rule_admin`.
+- Automated hardening tests (`tests/test_phase6.py`):
+  - Forbidden words test (greps frontend and API for fraud, forged, fake, and unapproved conclusions).
+  - Hard-coded color test (verifies strict adherence to design tokens in `globals.css`).
+  - Administrative decision immutability test (ensures `admin_status` is locked to 'pending').
+  - Cryptographic audit chain tamper detection test.
+  - Complete check catalog coverage test (C1 to C15).
+- Full dataset evaluation benchmark (`scripts/evaluate.py` output in `evaluation.txt`): 22 true positives, 0 false positives, 0 false negatives, precision 1.000, recall 1.000, F1 1.000 across 44 applications.
+- Updated `README.md` with 15-minute setup and 2-minute judge/evaluator demo path.
+- Total test suite: 148 passed pytest tests; Next.js frontend builds cleanly with 18 routes.
 
 ## Roles
 

@@ -15,10 +15,13 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+cors_origins = [o.strip().rstrip("/") for o in settings.FRONTEND_ORIGIN.split(",") if o.strip()]
+cors_origins.extend(["http://localhost:3001", "http://127.0.0.1:3001"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN, "http://localhost:3001", "http://127.0.0.1:3001"],
-    allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
+    allow_origins=cors_origins,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX or r"^https://.*\.onrender\.com$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -203,7 +203,8 @@ def scenarios() -> list[tuple[str, str, AppSpec, list[str]]]:
     add("unsigned_required", "Affidavit uploaded without a digital signature; affidavits require one",
         replace(clean_spec(42, inst["INST-2028"]), signatures={"affidavit": "unsigned"}), ["SIGNATURE_INVALID|{code}|affidavit"])
     add("metadata_dates", "Faculty list created 15/10/2026 but last modified 01/08/2026",
-        replace(clean_spec(43, inst["INST-2029"]), pdf_dates={"faculty_list": ("D:20261015100000", "D:20260801100000")}),
+        replace(clean_spec(43, inst["INST-2029"]), faculty=_people(44),
+                pdf_dates={"faculty_list": ("D:20261015100000", "D:20260801100000")}),
         ["METADATA_ANOMALY|{code}|faculty_list"])
 
     # Clean applications, half of them new institutions: none may be flagged. An institution's second

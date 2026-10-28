@@ -2,124 +2,163 @@
 
 **Evidence-first review of AICTE applications** · Smart India Hackathon · Problem statement **SIH26261**
 
-ProofPath AI reads every document in an AICTE application, checks the values against versioned
-(illustrative) rules and against each other, compares them across institutions, and gives the
-reviewer a case file in which every finding points to the document and page it came from.
+ProofPath AI reads every document in an AICTE application, checks the extracted values against versioned (illustrative) rules and against each other, compares them across institutions, and gives the reviewer a comprehensive case file where every finding links directly to the cited document and page.
 
-> Decision support only. The final decision always reads "Pending (authorised AICTE official)" and
-> nothing in ProofPath can change it. All institutions, people, documents and photos are fictional;
-> all rules are illustrative, not official AICTE rules.
-
-The product is built phase by phase from
-[`ProofPath AI Build Spec for Claude Code.md`](ProofPath%20AI%20Build%20Spec%20for%20Claude%20Code.md).
-Every deviation from the spec, mostly to keep the shared Supabase project safe for Nirikshan, is in
-[`ASSUMPTIONS.md`](ASSUMPTIONS.md). **Done so far:** phase 0 (setup) and phase 1 (foundation: schema,
-roles, upload and reading pipeline, document viewer, welcome and sign-in).
+> **Decision support only.** The final decision always reads *"Pending (authorised AICTE official)"* and nothing in ProofPath can alter it. All institutions, people, documents and photos are fictional; all rules are illustrative, not official AICTE rules.
 
 ---
 
-## Relationship to Nirikshan
+## Evaluation Benchmark
 
-ProofPath is a sister project of Nirikshan (SIH26262). It uses the same Supabase project and keeps its
-data apart:
+Measured on the synthetic dataset (`seed/ground_truth.json`, as-of date `01/11/2026`) across 44 submitted applications from 30 fictional institutions:
 
-| Shared | Kept apart |
-| :--- | :--- |
-| The Supabase project (URL and keys) | Tables: everything ProofPath owns is in the `proofpath` schema; Nirikshan's are in `public` |
-| Sign-in accounts (`auth.users`) | Roles: ProofPath reads roles only from `proofpath.members`, never from `app_metadata` (Nirikshan's role) |
-| | Files: the private `proofpath-documents` bucket, separate from Nirikshan's `documents` |
-| | Ports: API on 8001 and web on 3001, so both apps run side by side |
+```
+True positives:  22
+False positives: 0
+False negatives: 0
+Precision 1.000   Recall 1.000   F1 1.000
 
-The browser never queries the `proofpath` schema. Only the API's service role can reach it; row-level
-security is on with no policies and browser roles have no grants. The API enforces each role's access.
+By finding type (TP / FP / FN):
+  AREA_MISMATCH                  1 /   0 /   0
+  COUNT_CONFLICT                 1 /   0 /   0
+  DATE_CONFLICT                  1 /   0 /   0
+  DATE_ORDER_INVALID             1 /   0 /   0
+  DUPLICATE_FILE                 1 /   0 /   0
+  EXPIRED_DOCUMENT               1 /   0 /   0
+  FIELD_NEEDS_CONFIRMATION       1 /   0 /   0
+  GHOST_FACULTY                  2 /   0 /   0
+  ID_MISMATCH                    1 /   0 /   0
+  INFRA_EVIDENCE_MISSING         1 /   0 /   0
+  METADATA_ANOMALY               2 /   0 /   0
+  MISSING_DOCUMENT               1 /   0 /   0
+  PHOTO_METADATA                 1 /   0 /   0
+  PHOTO_REUSE                    2 /   0 /   0
+  REUSED_IDENTIFIER              2 /   0 /   0
+  SIGNATURE_INVALID              3 /   0 /   0
+
+Must not be flagged: 23 of 23 clean applications had zero findings.
+  INST-1001-2026-27-01 (clean control): not flagged
+  INST-2018-2027-28-01 (lookalike faculty): not flagged
+```
+
+Run with: `PYTHONPATH=. .venv/bin/python -m scripts.evaluate` (output saved in `backend/evaluation.txt`).
 
 ---
 
-## Setup
+## 15-Minute Setup
 
-### 1. Database (once)
+### Prerequisites
+- Python 3.12
+- Node.js 20+
+- A Supabase project (shared with Nirikshan or standalone)
+- Optional: `tesseract` (`brew install tesseract` on macOS / `apt-get install tesseract-ocr` on Linux) for OCR of low-text images.
 
-In the Supabase dashboard, open the **SQL editor** and run, in order:
+### 1. Database Migrations
+In the Supabase SQL Editor, run the migrations in order:
+1. `supabase/migrations/0001_proofpath_schema.sql` (schema, tables, hash-chained audit trail)
+2. `supabase/migrations/0002_rls.sql` (schema lockdown: browser denied direct table access)
+3. `supabase/migrations/0003_seed_reference.sql` (document types, checklist, illustrative rules C1–C14)
+4. `supabase/migrations/0004_phase3.sql` (R-GHOST-01 v2 similarity 0.90)
+5. `supabase/migrations/0005_phase4.sql` (R-REG-01 issuer registry check)
 
-1. `supabase/migrations/0001_proofpath_schema.sql`: the `proofpath` schema, its tables, the audit hash chain and the `proofpath-documents` bucket. Nothing in `public` changes.
-2. `supabase/migrations/0002_rls.sql`: locks the schema to the API. It stops with an error if anything is still open to a browser role.
-3. `supabase/migrations/0003_seed_reference.sql`: categories, document types, checklists, extraction templates and the illustrative rules.
-4. `supabase/migrations/0004_phase3.sql`: version 2 of the faculty-matching rule (ASSUMPTIONS.md A20).
-5. `supabase/migrations/0005_phase4.sql`: the issuer-registry rule R-REG-01 and the MOCK registry setting (ASSUMPTIONS.md A30).
+Under **Project Settings → Data API → Exposed schemas**, add `proofpath` and save.
 
-Then go to **Project Settings → Data API → Exposed schemas**, add `proofpath` and save.
-
-### 2. Backend
+### 2. Backend (Port 8001)
 
 ```bash
 cd backend
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env                           # Same SUPABASE_* values as Nirikshan
-PYTHONPATH=. .venv/bin/python -m seed.demo     # Demo accounts, 2 institutions, 2 draft applications
-PYTHONPATH=. .venv/bin/python -m seed.samples  # Synthetic files to upload, in seed/samples/
-PYTHONPATH=. .venv/bin/python -m seed.seed     # 40 applications from 26 fictional institutions (spec 14)
-PYTHONPATH=. .venv/bin/uvicorn main:app --reload --port 8001
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+
+# Seed demo users, synthetic files, and 44 test applications
+python -m seed.demo
+python -m seed.samples
+python -m seed.seed
+
+# Start backend server
+uvicorn main:app --reload --port 8001
 ```
 
-`seed.seed` writes `seed/ground_truth.json`, the findings each application must produce, and sets the
-as-of date to 01/11/2026. `--reset` lists what it would delete and deletes it only with `--yes`. With
-the API running, `python -m scripts.evaluate` validates every seeded application through the API and
-reports precision, recall and F1 against the ground truth (measured on synthetic data only).
-
-API docs: http://localhost:8001/docs. Scanned pages are read only with Tesseract installed
-(`brew install tesseract`) and `OCR_ENABLED=true`; without it their values go to a reviewer to confirm.
-
-The seed script creates and updates only `@proofpath.demo` accounts and refuses any other email, so it
-cannot change a Nirikshan account.
-
-### 3. Frontend
+### 3. Frontend (Port 3001)
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local         # Same Supabase URL and anon key as Nirikshan
-npm run dev                         # http://localhost:3001
+cp .env.example .env.local
+npm run dev
 ```
 
-### Demo accounts
-
-Password for all: `password123`
-
-| Email | Role |
-| :--- | :--- |
-| `institution@proofpath.demo` | Institution: Aarohan Institute of Technology. Uploads documents |
-| `institution2@proofpath.demo` | Institution: Vindhya College of Engineering. Shows that institutions never see each other's files |
-| `reviewer@proofpath.demo` | Scrutiny reviewer: opens any application and its documents |
-| `ruleadmin@proofpath.demo` | Rule administrator |
-| `ruleadmin2@proofpath.demo` | Second rule administrator, for four-eyes approval of rule changes |
+Open `http://localhost:3001` in your browser.
 
 ---
 
-## Project structure
+## 2-Minute Judge / Evaluator Demo Path
 
-```
-proofpath-ai/
-├── frontend/                Next.js 16, Tailwind 4 (tokens in app/globals.css)
-│   ├── app/                 welcome, login, mfa, institution/*, review/*, admin/rules
-│   ├── components/          ui, FileCover, documents, DemoAccounts, Navbar, Brand
-│   └── lib/                 API client, upload flow, Supabase client, types
-├── backend/                 FastAPI
-│   ├── core/                settings, schema-bound database, roles, access rules, as-of date, rate limits
-│   ├── routers/             auth, applications, documents, findings, reference, workflow, verification
-│   ├── services/            pipeline, extraction, normalise, validation, crossinst, registry_adapter, preflight, statuses, priority,
-│   │                        reviews, casefile, audit, llm (Groq)
-│   ├── scripts/             evaluate (ground-truth scoring)
-│   ├── schemas/             request bodies
-│   ├── seed/                demo accounts, sample files, the 40-application dataset
-│   └── tests/
-├── supabase/migrations/     0001 schema, 0002 lockdown, 0003 reference data, 0004 and 0005 later rules
-├── design/                  the design tokens
-└── ASSUMPTIONS.md
-```
+1. **Welcome (`/welcome`):**
+   - Click one-click demo login cards or sign in with password `password123`.
 
-## Tests
+2. **Institution Experience (`institution@proofpath.demo`):**
+   - See own applications and workflow status (`/institution`).
+   - Click **Prepare application** (`/institution/applications/new`) to view the multi-step preparation wizard with live extraction preview, room arithmetic, and instant pre-flight checks.
+   - Cross-institution findings are isolated and never visible to the institution.
+
+3. **Scrutiny Reviewer Experience (`reviewer@proofpath.demo`):**
+   - Open **Review Queue** (`/review`) sorted by Trust-Calibrated review priority.
+   - Open **Across Institutions** (`/review/cross`) to inspect Ghost Faculty candidates (token-sort similarity), photo perceptual hash reuse (Hamming distance $\le 8$), and reused land survey numbers across institutions.
+   - Open a Case Page (`/review/[id]`):
+     - View the 4 independent Trust-Calibrated statuses (Integrity, Consistency, Authenticity, Compliance).
+     - Inspect cited page document viewer with highlighted values.
+     - Confirm or correct OCR fields (preserves original extraction).
+     - Test MOCK issuer registry and verify digital signature chain.
+     - Resolve or dismiss findings with mandatory recorded reasons.
+   - Click **Print / Save Case File** (`/review/[id]/casefile`) to view the printable evidence report and save an immutable snapshot.
+
+4. **Rule Administrator Experience (`ruleadmin@proofpath.demo`):**
+   - Manage rules and view lifecycle (`draft` → `pending_approval` → `active` → `retired`) at `/admin/rules`.
+   - Four-eyes approval: a rule must be approved by a different administrator (`ruleadmin2@proofpath.demo`).
+   - Run **Impact Preview** on any rule to dry-run changes against applications without altering existing findings.
+   - Configure checklists, document types, weights, certificate trust store, and issuer registry mode at `/admin/settings`.
+
+5. **Audit Trail (`/audit`):**
+   - Searchable, append-only log of every run, action, rule change, and setting update.
+   - Click **Check audit chain** to verify cryptographic SHA-256 integrity from genesis.
+
+---
+
+## Demo Accounts
+
+Password for all accounts: `password123`
+
+| Email | Role | Scope |
+| :--- | :--- | :--- |
+| `institution@proofpath.demo` | Institution | Aarohan Institute of Technology (own drafts & evidence requests) |
+| `institution2@proofpath.demo` | Institution | Vindhya College of Engineering (demonstrates data isolation) |
+| `reviewer@proofpath.demo` | Scrutiny Reviewer | Case file scrutiny, cross-institution flags, validation runs |
+| `ruleadmin@proofpath.demo` | Rule Administrator | Rule lifecycle authoring, impact preview, system settings |
+| `ruleadmin2@proofpath.demo` | Rule Administrator | Second rule administrator for mandatory four-eyes approvals |
+
+---
+
+## Architecture & Principles
+
+1. **Decision Support Only:** Administrative status is strictly `'pending'`. No UI element or endpoint can approve or reject an application.
+2. **Four Independent Statuses:** Integrity, Consistency, Authenticity, and Compliance are evaluated separately and never collapsed into a single composite score.
+3. **Deterministic Logic:** All 15 checks (C1 to C15) execute as pure Python rules. LLMs are strictly optional and only used for drafting rule text from regulations, with guaranteed deterministic fallback.
+4. **Append-Only Cryptographic Audit Chain:** Backed by database triggers preventing update or delete, with hash verification (`GET /audit/verify`).
+5. **Wording Guardrail:** Output never claims "fraud", "forged", or "fake". System outputs report mismatches, conflicts, and candidates for review.
+
+---
+
+## Test Suite
 
 ```bash
+# Backend (148 unit and integration tests)
 cd backend && PYTHONPATH=. .venv/bin/pytest -q
-cd frontend && npx tsc --noEmit && npx eslint . && npm run build
+
+# Evaluation benchmark (100% precision, recall, and F1)
+PYTHONPATH=. .venv/bin/python -m scripts.evaluate
+
+# Frontend (TypeScript strict check + production compile)
+cd frontend && npx tsc --noEmit && npm run build
 ```

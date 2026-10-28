@@ -1,0 +1,30 @@
+Measured on a synthetic dataset; not validated on real AICTE records.
+
+Ground truth: 44 applications, as-of date 2026-11-01.
+
+True positives:  22
+False positives: 0
+False negatives: 0
+Precision 1.000   Recall 1.000   F1 1.000
+
+By finding type (true positives / false positives / false negatives):
+  AREA_MISMATCH                  1 /   0 /   0
+  COUNT_CONFLICT                 1 /   0 /   0
+  DATE_CONFLICT                  1 /   0 /   0
+  DATE_ORDER_INVALID             1 /   0 /   0
+  DUPLICATE_FILE                 1 /   0 /   0
+  EXPIRED_DOCUMENT               1 /   0 /   0
+  FIELD_NEEDS_CONFIRMATION       1 /   0 /   0
+  GHOST_FACULTY                  2 /   0 /   0
+  ID_MISMATCH                    1 /   0 /   0
+  INFRA_EVIDENCE_MISSING         1 /   0 /   0
+  METADATA_ANOMALY               2 /   0 /   0
+  MISSING_DOCUMENT               1 /   0 /   0
+  PHOTO_METADATA                 1 /   0 /   0
+  PHOTO_REUSE                    2 /   0 /   0
+  REUSED_IDENTIFIER              2 /   0 /   0
+  SIGNATURE_INVALID              3 /   0 /   0
+
+Must not be flagged: 23 of 23 applications had no findings, including the clean control INST-1001-2026-27-01.
+  INST-1001-2026-27-01 (clean control): not flagged
+  INST-2018-2027-28-01 (lookalike): not flagged
