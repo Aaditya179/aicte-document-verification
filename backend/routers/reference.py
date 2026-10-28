@@ -1,4 +1,4 @@
-"""Reference data, public demo accounts, the rule list and the audit check."""
+"""Reference data, public demo accounts and the audit check."""
 from fastapi import APIRouter, Depends
 
 from core import demo
@@ -25,11 +25,6 @@ def reference(user: AuthenticatedUser = Depends(require_role(["institution", "re
         "document_types": db.fetch_all("document_types"),
         "required_documents": db.fetch_all("required_documents"),
     }
-
-
-@router.get("/rules")
-def list_rules(user: AuthenticatedUser = Depends(require_role(["rule_admin"]))):
-    return db.table("rules").select("*").order("rule_code").order("version", desc=True).execute().data or []
 
 
 @router.get("/audit/verify", tags=["Audit"])

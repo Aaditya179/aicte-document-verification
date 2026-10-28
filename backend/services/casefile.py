@@ -110,6 +110,11 @@ def _verification(check: dict) -> dict:
     out = {k: check.get(k) for k in ("method", "status", "source", "is_mock", "checked_at")}
     if check["method"] == "MANUAL":
         out["detail"] = f"{r.get('contact', '')}. {r.get('note', '')}".strip(". ")
+    elif check["method"] == "SIGNATURE":
+        signer = next((x.get("signer") for x in r.get("signatures") or [] if x.get("signer")), None)
+        out["detail"] = (r.get("note") or "") + (f". Signer: {signer}" if signer else "")
+    elif check["method"] == "METADATA":
+        out["detail"] = "; ".join(i["text"] for i in r.get("indicators") or []) or "No indicators"
     elif check["method"] == "REGISTRY":
         differs = [c["field"].replace("_", " ") for c in r.get("compared") or [] if c.get("same") is False]
         out["detail"] = (f"Differs: {', '.join(differs)}" if differs else r.get("note", ""))

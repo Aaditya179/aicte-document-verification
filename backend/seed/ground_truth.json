@@ -136,6 +136,35 @@
         "INFRA_EVIDENCE_MISSING|INST-2025-2027-28-01|library"
       ]
     },
+    "INST-2026-2027-28-01": {
+      "scenario": "signature_changed",
+      "note": "Certificate's page replaced after signing to show validity until 31/03/2030; the signed revision says 31/03/2028",
+      "expected": [
+        "SIGNATURE_INVALID|INST-2026-2027-28-01|approval_certificate",
+        "METADATA_ANOMALY|INST-2026-2027-28-01|approval_certificate"
+      ]
+    },
+    "INST-2027-2027-28-01": {
+      "scenario": "untrusted_signer",
+      "note": "Fire NOC signed by a certificate that is not in the trust store",
+      "expected": [
+        "SIGNATURE_INVALID|INST-2027-2027-28-01|fire_noc"
+      ]
+    },
+    "INST-2028-2027-28-01": {
+      "scenario": "unsigned_required",
+      "note": "Affidavit uploaded without a digital signature; affidavits require one",
+      "expected": [
+        "SIGNATURE_INVALID|INST-2028-2027-28-01|affidavit"
+      ]
+    },
+    "INST-2029-2027-28-01": {
+      "scenario": "metadata_dates",
+      "note": "Faculty list created 15/10/2026 but last modified 01/08/2026",
+      "expected": [
+        "METADATA_ANOMALY|INST-2029-2027-28-01|faculty_list"
+      ]
+    },
     "INST-2009-2027-28-01": {
       "scenario": "clean",
       "note": "Consistent documents",

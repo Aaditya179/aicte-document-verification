@@ -13,7 +13,7 @@ from core.access import document_for
 from core.config import settings
 from core.db import db
 from core.security import AuthenticatedUser, require_role
-from services import audit, registry_adapter
+from services import audit, forensics, registry_adapter
 from services.extraction import sniff_mime
 from services.validation import has_full_run, run_validation
 
@@ -94,6 +94,27 @@ def verify_registry(document_id: str, user: AuthenticatedUser = Depends(require_
         "differs": [c["field"] for c in result.compared if c["same"] is False],
     })
     return {"check": _public(check, {}), "validation": _revalidate(user, application, "registry_checked")}
+
+
+@router.post("/documents/{document_id}/verify/signature")
+def verify_signature(document_id: str, user: AuthenticatedUser = Depends(require_role(["reviewer"]))):
+    """Check the embedded signature and the file metadata again, for example after the trust store changed.
+    Each run is a new row; earlier results are kept."""
+    document, application = document_for(user, document_id)
+    _require_submitted(application)
+    if document["status"] != "current" or document["integrity_status"] != "passed":
+        raise HTTPException(status_code=409, detail="Only the current version of a document that passed the file check can be checked")
+    try:
+        data = db.storage.download(document["storage_path"])
+    except Exception:
+        raise HTTPException(status_code=502, detail="The file could not be fetched from storage, try again")
+    doc_type = db.fetch_one("document_types", code=document["doc_type"]) or {}
+    signature, metadata = forensics.record(document, data, doc_type, user.id)
+    audit.record(user, "signature_checked", "document", document_id, application["id"],
+                 {"signature": signature["status"], "metadata": metadata["status"],
+                  "indicators": [i["code"] for i in metadata.get("indicators", [])]})
+    return {"signature": signature["status"], "metadata": metadata["status"],
+            "validation": _revalidate(user, application, "signature_checked")}
 
 
 @router.post("/documents/{document_id}/verify/manual")

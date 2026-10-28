@@ -3,8 +3,8 @@ Synthetic documents for the seeded dataset (build spec section 14). Everything i
 
 Each document prints one "Label: value" pair per line, the format the extraction templates in
 0003_seed_reference.sql read, under a banner saying it is synthetic. PDFs are drawn with PyMuPDF and
-photos with Pillow, so the dataset needs no other tools. Generation is deterministic: the same
-AppSpec always gives byte-identical files, so ground_truth.json stays valid across runs.
+photos with Pillow. Unsigned files are deterministic: the same AppSpec gives byte-identical files.
+Certificates, NOCs and affidavits are then signed by fictional issuers (seed/signing.py, `finish`).
 """
 import io
 import random
@@ -62,6 +62,9 @@ class AppSpec:
     photo_dates: dict = field(default_factory=dict)   # photo category -> when it was taken, if not photo_taken
     photo_copy: dict = field(default_factory=dict)    # photo category -> (AppSpec, category) re-saved from another application
     rooms_scale: float = 1.0                   # room table total as a share of the declared area
+    signatures: dict = field(default_factory=dict)    # doc_type -> "unsigned", "unlisted" or "changed" (default: signed by its issuer)
+    changed: dict = field(default_factory=dict)       # for "changed": AppSpec values shown in the revision added after signing
+    pdf_dates: dict = field(default_factory=dict)     # doc_type -> (creation date, modification date) as PDF date strings
 
 
 def _pdf(title: str, lines: list[str]) -> bytes:
@@ -192,6 +195,23 @@ def rooms(s: AppSpec) -> list[dict]:
     rows = [{"room_label": n, "length_m": l, "width_m": w} for n, l, w in fixed]
     rows.append({"room_label": "Corridors, staff rooms and services", "length_m": round(rest / 20, 4), "width_m": 20})
     return rows
+
+
+def finish(doc_type: str, s: AppSpec, data: bytes) -> bytes:
+    """Signatures and file dates (checks C13 and C14). Signature-required documents are signed by their
+    fictional issuer unless the scenario says otherwise. Signing adds the signing time, so these files
+    are not byte-identical between runs; no expected finding key depends on their hash."""
+    from dataclasses import replace
+    from seed import signing
+    if doc_type in s.pdf_dates:
+        data = signing.set_dates(data, *s.pdf_dates[doc_type])
+    how = s.signatures.get(doc_type)
+    if doc_type not in signing.SIGNED_BY or how == "unsigned":
+        return data
+    signed = signing.sign(data, signing.UNLISTED if how == "unlisted" else signing.SIGNED_BY[doc_type])
+    if how == "changed":
+        return signing.change_after_signing(signed, PDF_BUILDERS[doc_type](replace(s, **s.changed)))
+    return signed
 
 
 PDF_BUILDERS = {

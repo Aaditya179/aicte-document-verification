@@ -10,6 +10,7 @@ import { formatDateTime } from './ui';
 const POLL_MS = 60_000;   // notifications are polled, not pushed (ASSUMPTIONS.md D4)
 
 function hrefFor(n: AppNotification, role: Role) {
+  if (n.ref_type === 'rule' && n.ref_id) return `/admin/rules/${n.ref_id}`;
   if (n.ref_type !== 'application' || !n.ref_id) return null;
   return role === 'institution' ? `/institution/applications/${n.ref_id}` : `/review/${n.ref_id}`;
 }

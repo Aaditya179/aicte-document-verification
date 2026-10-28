@@ -1,5 +1,5 @@
 """
-The synthetic dataset (build spec section 14): fictional institutions, 30 submitted applications with
+The synthetic dataset (build spec section 14): fictional institutions, 44 submitted applications with
 generated documents and photos, and ground_truth.json listing exactly which findings each application
 must produce. Everything is FICTIONAL and labelled so.
 
@@ -17,6 +17,11 @@ Phase 2 added the within-application scenarios (checks C1 to C6) and 21 clean ap
 adds eleven applications at new institutions for checks C7 to C12, among them a look-alike that must
 not be flagged, and a room table for every seeded application. Rerunning adds only what is missing,
 so the phase 2 applications and the reviewer actions on them stay.
+
+Phase 5 signs every certificate, NOC and affidavit with a fictional issuer's certificate (seed/signing.py)
+and puts the fictional root in the trust store, and adds four applications for checks C13 and C14: a
+certificate changed after it was signed, a NOC signed by a certificate outside the trust store, an
+unsigned affidavit, and a faculty list whose creation date is later than its modification date.
 """
 import argparse
 import hashlib
@@ -64,6 +69,11 @@ INSTITUTIONS = [
     ("INST-2023", "Sharavati Institute of Technology", "Shivamogga"),
     ("INST-2024", "Indravati Engineering College", "Jagdalpur"),
     ("INST-2025", "Subarnarekha Institute of Technology", "Jamshedpur"),
+    # Phase 5 scenarios
+    ("INST-2026", "Sindhu Institute of Technology", "Bhuj"),
+    ("INST-2027", "Teesta College of Engineering", "Siliguri"),
+    ("INST-2028", "Ghaghara Institute of Technology", "Gorakhpur"),
+    ("INST-2029", "Mahi Institute of Engineering", "Vadodara"),
 ]
 
 # Distinct given names and surnames; each person in the dataset gets a unique pair
@@ -182,6 +192,20 @@ def scenarios() -> list[tuple[str, str, AppSpec, list[str]]]:
         replace(clean_spec(39, inst["INST-2025"]), photo_categories=("lab", "classroom")),
         ["INFRA_EVIDENCE_MISSING|{code}|library"])
 
+    # Phase 5: signatures and file metadata. The changed certificate shows a later expiry in the revision
+    # added after signing, and the form declares that same date, so only C13 and C14 apply.
+    add("signature_changed", "Certificate's page replaced after signing to show validity until 31/03/2030; the signed revision says 31/03/2028",
+        replace(clean_spec(40, inst["INST-2026"]), signatures={"approval_certificate": "changed"}, changed={"cert_expiry": "31/03/2030"},
+                form_cert_valid_until="31 March 2030"),
+        ["SIGNATURE_INVALID|{code}|approval_certificate", "METADATA_ANOMALY|{code}|approval_certificate"])
+    add("untrusted_signer", "Fire NOC signed by a certificate that is not in the trust store",
+        replace(clean_spec(41, inst["INST-2027"]), signatures={"fire_noc": "unlisted"}), ["SIGNATURE_INVALID|{code}|fire_noc"])
+    add("unsigned_required", "Affidavit uploaded without a digital signature; affidavits require one",
+        replace(clean_spec(42, inst["INST-2028"]), signatures={"affidavit": "unsigned"}), ["SIGNATURE_INVALID|{code}|affidavit"])
+    add("metadata_dates", "Faculty list created 15/10/2026 but last modified 01/08/2026",
+        replace(clean_spec(43, inst["INST-2029"]), pdf_dates={"faculty_list": ("D:20261015100000", "D:20260801100000")}),
+        ["METADATA_ANOMALY|{code}|faculty_list"])
+
     # Clean applications, half of them new institutions: none may be flagged. An institution's second
     # application takes the other academic year, so every application code is unique.
     used = {app_code(spec) for _, _, spec, _ in out}
@@ -209,7 +233,7 @@ def documents_for(spec: AppSpec) -> list[tuple[str, str, str, bytes, str | None]
     for doc_type, builder in mk.PDF_BUILDERS.items():
         if doc_type in spec.skip or doc_type in spec.duplicate_of:
             continue
-        docs.append((doc_type, f"{doc_type}.pdf", "application/pdf", builder(spec), None))
+        docs.append((doc_type, f"{doc_type}.pdf", "application/pdf", mk.finish(doc_type, spec, builder(spec)), None))
     photos = {c: mk.photo(spec, c) for c in spec.photo_categories}
     for c, data in photos.items():
         docs.append(("infrastructure_photo", f"{c}_photo.jpg", "image/jpeg", data, c))
@@ -297,11 +321,30 @@ def reset(confirm: bool) -> None:
     paths = [d["storage_path"] for d in docs if d.get("storage_path")]
     for i in range(0, len(paths), 100):
         db.storage.remove(paths[i:i + 100])
+    ids = [a["id"] for a in existing]
+    # Findings first: cross-institution evidence on one application cites another's documents
+    for i in range(0, len(ids), 20):
+        chunk = ids[i:i + 20]
+        db.table("evidence_requests").delete().in_("application_id", chunk).execute()
+        db.table("findings").delete().in_("application_id", chunk).execute()
+        db.table("findings").delete().in_("related_application_id", chunk).execute()
     for a in existing:
-        db.table("evidence_requests").delete().eq("application_id", a["id"]).execute()
         db.table("case_file_snapshots").delete().eq("application_id", a["id"]).execute()
         db.table("applications").delete().eq("id", a["id"]).execute()
     print(f"Deleted {len(existing)} applications.")
+
+
+def trust_seed_root() -> None:
+    """Put the fictional root CA in the trust store, replacing an earlier seed root; certificates a rule
+    administrator added stay."""
+    from datetime import timezone
+    from seed import signing
+    from services import forensics
+    info = forensics.describe(forensics.load_certificate(signing.root_pem()))
+    store = [c for c in forensics.trust_store() if c.get("source") != "seed"]
+    entry = {**info, "name": "ProofPath demo root (fictional issuers)", "source": "seed", "added_by": None,
+             "added_at": datetime.now(timezone.utc).isoformat()}
+    db.table("settings").upsert({"key": "trust_store", "value": {"certificates": store + [entry]}}, on_conflict="key").execute()
 
 
 def run() -> None:
@@ -314,6 +357,7 @@ def run() -> None:
         return
 
     db.table("settings").upsert({"key": "as_of", "value": {"mode": "fixed", "date": AS_OF.isoformat()}}, on_conflict="key").execute()
+    trust_seed_root()
     institutions = {}
     for code, name, city in INSTITUTIONS:
         institutions[code] = db.table("institutions").upsert({"code": code, "name": name, "city": city, "is_fictional": True},

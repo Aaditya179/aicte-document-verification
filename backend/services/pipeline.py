@@ -21,7 +21,7 @@ from typing import Optional
 from core.config import settings
 from core.db import db
 from core.security import AuthenticatedUser
-from services import audit, extraction
+from services import audit, extraction, forensics
 
 logger = logging.getLogger("proofpath.pipeline")
 
@@ -200,6 +200,12 @@ def process_document(document_id: str) -> None:
                     db.table("faculty").insert([{**f, "document_id": document_id, "application_id": application["id"],
                                                  "institution_id": application["institution_id"]} for f in faculty]).execute()
                 counts["faculty"] = len(faculty)
+
+        try:
+            signature, metadata = forensics.record(document, data, doc_type)
+            counts.update({"signature": signature["status"], "metadata": metadata["status"]})
+        except Exception:
+            logger.exception("Signature and metadata checks failed for %s", document_id)
 
         db.update("documents", document_id, {"processing_status": "done", "processing_note": None})
         audit.record(None, "document_processed", "document", document_id, document["application_id"], counts)

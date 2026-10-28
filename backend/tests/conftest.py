@@ -14,6 +14,7 @@ USERS = {
     "institution_b": AuthenticatedUser(id="user-inst-b", email="b@proofpath.demo", role="institution", institution_id=INST_B),
     "reviewer": AuthenticatedUser(id="user-reviewer", email="r@proofpath.demo", role="reviewer", aal="aal2"),
     "rule_admin": AuthenticatedUser(id="user-admin", email="ra@proofpath.demo", role="rule_admin", aal="aal2"),
+    "rule_admin_2": AuthenticatedUser(id="user-admin-2", email="ra2@proofpath.demo", role="rule_admin", aal="aal2"),
 }
 
 

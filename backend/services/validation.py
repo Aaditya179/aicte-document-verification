@@ -29,7 +29,7 @@ logger = logging.getLogger("proofpath.validation")
 UNRESOLVED = ("open", "evidence_requested")
 CROSS_TYPES = {"REUSED_IDENTIFIER", "GHOST_FACULTY", "PHOTO_REUSE"}
 # Findings that come from a reviewer's own verification, never shown in an institution's pre-flight
-REVIEWER_TYPES = CROSS_TYPES | {"REGISTRY_MISMATCH"}
+REVIEWER_TYPES = CROSS_TYPES | {"REGISTRY_MISMATCH", "METADATA_ANOMALY"}
 
 
 @dataclass
@@ -62,6 +62,7 @@ class Context:
     rooms: list[dict] = field(default_factory=list)         # the room table entered for the floor plan
     cross: Optional[crossinst.CrossData] = None             # other institutions' claims; None skips C7 to C9
     registry: Optional[dict[str, dict]] = None              # document id -> latest REGISTRY check; None skips C15
+    checks: dict[str, dict[str, dict]] = field(default_factory=dict)  # document id -> method -> latest SIGNATURE or METADATA check
 
     @property
     def passed(self) -> list[dict]:
@@ -429,6 +430,68 @@ def check_photo_metadata(ctx: Context) -> list[Finding]:
 
 
 # ------------------------------------------------------------------------------------------------
+# Checks C13 and C14 (signature and file metadata)
+# ------------------------------------------------------------------------------------------------
+
+SIGNATURE_WORDS = {"invalid": "does not verify", "untrusted_chain": "does not chain to the trust store", "unsigned": "is missing"}
+
+
+def check_signatures(ctx: Context) -> list[Finding]:
+    """C13: the latest SIGNATURE check is invalid or untrusted_chain. Unsigned is a finding only when
+    the document type requires a signature; unsupported is never one. A document not checked yet
+    produces nothing."""
+    out = []
+    for doc in ctx.passed:
+        check = ctx.checks.get(doc["id"], {}).get("SIGNATURE")
+        if not check:
+            continue
+        status = check.get("status")
+        required = ctx.doc_types.get(doc["doc_type"], {}).get("signature_required")
+        if status not in ("invalid", "untrusted_chain") and not (status == "unsigned" and required):
+            continue
+        response = check.get("response") or {}
+        signer = next((x.get("signer") for x in response.get("signatures") or [] if x.get("signer")), None)
+        label = ctx.label(doc["doc_type"])
+        if status == "invalid":
+            title = f"{label}: digital signature does not verify"
+        elif status == "untrusted_chain":
+            title = f"{label}: signed by a certificate that does not chain to the trust store"
+        else:
+            title = f"{label} has no digital signature; this document type requires one"
+        detail = (response.get("note") or "") + (f". Signer named in the file: {signer}" if signer else "") + ". Candidate for review."
+        out.append(Finding(
+            key=f"SIGNATURE_INVALID|{ctx.application['code']}|{doc['doc_type']}",
+            finding_type="SIGNATURE_INVALID", rule_code="R-SIG-01", rule_version=ctx.version("R-SIG-01"),
+            severity="high" if status == "invalid" else "medium", title=title, detail=detail.lstrip(". "),
+            evidence=[evidence(doc, None, "SINGLE", f"{label}, digital signature",
+                               {"invalid": "Does not verify", "untrusted_chain": "Untrusted certificate chain",
+                                "unsigned": "Unsigned"}[status] + (f" ({signer})" if signer else ""))],
+        ))
+    return out
+
+
+def check_metadata_anomaly(ctx: Context) -> list[Finding]:
+    """C14: indicators read from the PDF's metadata. An indicator only, shown with what was read."""
+    out = []
+    for doc in ctx.passed:
+        check = ctx.checks.get(doc["id"], {}).get("METADATA")
+        indicators = ((check or {}).get("response") or {}).get("indicators") or []
+        if not check or check.get("status") != "indicators" or not indicators:
+            continue
+        label = ctx.label(doc["doc_type"])
+        out.append(Finding(
+            key=f"METADATA_ANOMALY|{ctx.application['code']}|{doc['doc_type']}",
+            finding_type="METADATA_ANOMALY", rule_code="R-META-01", rule_version=ctx.version("R-META-01"),
+            severity="low",
+            title=f"{label}: {indicators[0]['text'][0].lower()}{indicators[0]['text'][1:]}" if len(indicators) == 1
+            else f"{label}: {len(indicators)} file metadata indicators",
+            detail="; ".join(i["text"] for i in indicators) + ". An indicator from the file's metadata, not a verdict. Candidate for review.",
+            evidence=[evidence(doc, None, "SINGLE", f"{label}, file metadata", i["text"]) for i in indicators],
+        ))
+    return out
+
+
+# ------------------------------------------------------------------------------------------------
 # Check C15 (authenticity)
 # ------------------------------------------------------------------------------------------------
 
@@ -495,20 +558,23 @@ CHECKS: list[tuple[str, str, Callable[[Context], list[Finding]], set[str]]] = [
     ("C10", "R-INFRA-01", check_infra_evidence, {"INFRA_EVIDENCE_MISSING"}),
     ("C11", "R-AREA-01", check_area, {"AREA_MISMATCH", "AREA_BELOW_MINIMUM"}),
     ("C12", "R-PHOTOAGE-01", check_photo_metadata, {"PHOTO_METADATA"}),
+    ("C13", "R-SIG-01", check_signatures, {"SIGNATURE_INVALID"}),
+    ("C14", "R-META-01", check_metadata_anomaly, {"METADATA_ANOMALY"}),
     ("C15", "R-REG-01", check_registry_mismatch, {"REGISTRY_MISMATCH"}),
 ]
 
 
 def evaluate(ctx: Context, include_cross: bool = True) -> tuple[list[Finding], set[str]]:
-    """Every finding the active rules produce, and the finding types whose checks ran."""
+    """Every finding the active rules produce, and the finding types whose checks ran. include_cross
+    False is the institution's view: no cross-institution or reviewer-side findings."""
     findings, evaluated = [], set()
     for _, rule_code, check, types in CHECKS:
         if rule_code not in ctx.rules:
             continue                          # rule not active on the as-of date: the check does not run
         if types & CROSS_TYPES and (not include_cross or ctx.cross is None):
             continue                          # cross checks not run: their earlier findings are left alone
-        if "REGISTRY_MISMATCH" in types and (not include_cross or ctx.registry is None):
-            continue
+        if types & {"REGISTRY_MISMATCH", "METADATA_ANOMALY"} and (not include_cross or ctx.registry is None):
+            continue                          # reviewer-side checks: not in pre-flight
         evaluated |= types
         findings.extend(check(ctx))
     if not include_cross:
@@ -535,7 +601,10 @@ def active_rules(as_of: date, rows: Optional[list[dict]] = None) -> dict[str, di
     return out
 
 
-def load_context(application: dict, include_cross: bool = True) -> Context:
+def load_context(application: dict, include_cross: bool = True, reviewer: Optional[bool] = None) -> Context:
+    """include_cross loads other institutions' claims (C7 to C9); reviewer loads the reviewer-side
+    checks (registry and metadata, C14 and C15). Pre-flight loads neither."""
+    reviewer = include_cross if reviewer is None else reviewer
     def documents():
         docs = (db.table("documents").select("*").eq("application_id", application["id"])
                 .eq("status", "current").execute().data or [])
@@ -546,8 +615,8 @@ def load_context(application: dict, include_cross: bool = True) -> Context:
             lambda: db.table("extracted_fields").select("*").in_("document_id", ids).execute().data or [],
             lambda: db.table("media_assets").select("*").in_("document_id", ids).execute().data or [],
             lambda: db.table("faculty").select("*").in_("document_id", ids).execute().data or [],
-            lambda: (db.table("verification_checks").select("*").in_("document_id", ids).eq("method", "REGISTRY")
-                     .execute().data or []) if include_cross else [],
+            lambda: db.table("verification_checks").select("*").in_("document_id", ids)
+                     .in_("method", ["REGISTRY", "SIGNATURE", "METADATA"] if reviewer else ["SIGNATURE"]).execute().data or [],
         )
         return docs, fields, media, faculty, checks
 
@@ -562,8 +631,12 @@ def load_context(application: dict, include_cross: bool = True) -> Context:
         lambda: crossinst.load(application) if include_cross else None,
     )
     registry: dict[str, dict] = {}
+    latest: dict[str, dict[str, dict]] = {}
     for c in sorted(checks, key=lambda c: c.get("checked_at") or ""):
-        registry[c["document_id"]] = c
+        if c["method"] == "REGISTRY":
+            registry[c["document_id"]] = c
+        else:
+            latest.setdefault(c["document_id"], {})[c["method"]] = c
     fields: dict[str, list[dict]] = {}
     for f in field_rows:
         fields.setdefault(f["document_id"], []).append(f)
@@ -572,7 +645,7 @@ def load_context(application: dict, include_cross: bool = True) -> Context:
         doc_types={t["code"]: t for t in doc_types}, required=required, pairs=pairs,
         rules=active_rules(as_of, rules), category_label=category.get("label", ""),
         media={m["document_id"]: m for m in media}, faculty=faculty, rooms=rooms, cross=cross,
-        registry=registry if include_cross else None,
+        registry=registry if reviewer else None, checks=latest,
     )
 
 

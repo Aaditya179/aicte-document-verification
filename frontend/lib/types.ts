@@ -112,6 +112,8 @@ export interface Reference {
   required_documents: { category: string; doc_type: string; mandatory: boolean }[];
 }
 
+export type RuleStatus = 'draft' | 'pending_approval' | 'active' | 'retired';
+
 export interface Rule {
   id: string;
   rule_code: string;
@@ -121,10 +123,96 @@ export interface Rule {
   check_type: string;
   params: Record<string, unknown>;
   severity: string | null;
-  status: 'draft' | 'pending_approval' | 'active' | 'retired';
+  status: RuleStatus;
   effective_from: string | null;
   effective_to: string | null;
+  note: string | null;
+  source_reference: string | null;
+  clause: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  approved_by: string | null;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  check: string | null;
+  finding_types: string[];
+}
+
+export type ParamSpec =
+  | { kind: 'number' | 'int'; min: number; max: number; label: string }
+  | { kind: 'bool'; label: string }
+  | { kind: 'choices'; choices: string[]; label: string };
+
+export interface RuleEvent {
+  id: number;
+  event_type: string;
+  actor_role: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface RuleDetail {
+  rule: Rule;
+  versions: Rule[];
+  history: RuleEvent[];
+  params_schema: Record<string, ParamSpec>;
+}
+
+type ImpactFinding = { key: string; title: string; severity: string };
+
+export interface RuleImpact {
+  rule_code: string;
+  version: number;
+  check: string | null;
+  compared_with: number | null;
+  as_of_date: string;
+  available: boolean;
   note: string;
+  applications: { id: string; code: string; institution: string | null; created: ImpactFinding[]; closed: ImpactFinding[]; unchanged: number }[];
+  totals: { applications_checked: number; affected: number; created: number; closed: number };
+}
+
+/** A version is "approved" between a second administrator's approval and activation; the stored status stays pending_approval. */
+export function ruleStage(r: Pick<Rule, 'status' | 'approved_by'>): { label: string; tone: 'neutral' | 'pending' | 'active' | 'ok' } {
+  if (r.status === 'pending_approval') return r.approved_by ? { label: 'Approved, not yet active', tone: 'ok' } : { label: 'Waiting for approval', tone: 'pending' };
+  if (r.status === 'active') return { label: 'Active', tone: 'active' };
+  if (r.status === 'draft') return { label: 'Draft', tone: 'neutral' };
+  return { label: 'Retired', tone: 'neutral' };
+}
+
+export interface TrustedCertificate {
+  name: string;
+  subject: string;
+  issuer: string;
+  fingerprint: string;
+  not_before: string;
+  not_after: string;
+  is_ca: boolean;
+  source: string;
+  added_at: string;
+}
+
+export interface ExtractionTemplate {
+  id: string;
+  doc_type: string;
+  field_name: string;
+  regex: string;
+  group_index: number | null;
+  value_type: string | null;
+  required: boolean;
+}
+
+export interface AdminSettings {
+  as_of: { mode: 'today' | 'fixed'; date: string | null; effective: string };
+  priority_weights: { key: string; weight: number; label: string }[];
+  categories: { code: string; label: string }[];
+  document_types: { code: string; label: string; has_expiry: boolean; signature_required: boolean; is_photo: boolean }[];
+  required_documents: { category: string; doc_type: string; mandatory: boolean }[];
+  extraction_templates: ExtractionTemplate[];
+  trust_store: TrustedCertificate[];
+  registry_mode: string;
 }
 
 export interface DemoAccount {
@@ -385,6 +473,8 @@ export const FINDING_TYPE_LABEL: Record<string, string> = {
   AREA_BELOW_MINIMUM: 'Area below minimum',
   PHOTO_METADATA: 'Photo date',
   REGISTRY_MISMATCH: 'Differs from issuer registry',
+  SIGNATURE_INVALID: 'Signature not verified',
+  METADATA_ANOMALY: 'File metadata indicator',
 };
 
 // Authenticity (build spec 10). Each method keeps its own state; the latest check of a method is its state.
@@ -398,7 +488,8 @@ export const VERIFY_STATUS_LABEL: Record<string, string> = {
   passed: 'Passed', failed: 'Failed',
   match: 'Matches the registry', mismatch: 'Values differ from the registry', unavailable: 'Source unavailable (pending, not a failure)',
   manual_pending: 'Asked, waiting for an answer', manual_confirmed: 'Confirmed by the issuer', manual_not_confirmed: 'Issuer did not confirm',
-  valid: 'Valid', invalid: 'Invalid', untrusted_chain: 'Untrusted certificate chain', unsigned: 'Unsigned', unsupported: 'Not supported',
+  valid: 'Valid', invalid: 'Does not verify', untrusted_chain: 'Untrusted certificate chain', unsigned: 'Unsigned', unsupported: 'Not supported',
+  clear: 'No indicators', indicators: 'Indicators found',
 };
 
 export interface RegistryComparison {
@@ -429,6 +520,11 @@ export interface VerificationCheck {
     contact?: string; attachment?: { name: string; mime: string; size: number } | null;
     // HASH
     sha256?: string;
+    // SIGNATURE
+    signatures?: { field: string; signer?: string | null; signer_issuer?: string | null; signed_at?: string | null; status: string; note: string }[];
+    // METADATA
+    indicators?: { code: string; text: string }[]; creation_date?: string | null; modification_date?: string | null;
+    producer?: string | null; revisions?: number;
   };
 }
 

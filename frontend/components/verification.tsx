@@ -11,7 +11,11 @@ import { Loading, Mark, Notice, Tag, btnQuiet, btnSecondary, formatDate, formatD
 const TONE: Record<string, Tone> = {
   passed: 'ok', match: 'ok', manual_confirmed: 'ok', valid: 'ok',
   failed: 'conflict', mismatch: 'conflict', manual_not_confirmed: 'conflict', invalid: 'conflict', untrusted_chain: 'conflict',
-  unavailable: 'pending', manual_pending: 'pending',
+  unavailable: 'pending', manual_pending: 'pending', unsigned: 'pending', indicators: 'pending', clear: 'ok',
+};
+
+const METHOD_NAME: Record<string, string> = {
+  HASH: 'File check', SIGNATURE: 'Signature', METADATA: 'File metadata', REGISTRY: 'Issuer registry (MOCK)', MANUAL: 'Manual check',
 };
 
 const OUTCOMES = [
@@ -156,6 +160,7 @@ export function VerificationPanel({ doc, canAct, onChanged }: { doc: DocumentRow
   const [view, setView] = useState<DocumentVerification | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signing, setSigning] = useState(false);
   const [note, setNote] = useState<{ kind: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -184,6 +189,18 @@ export function VerificationPanel({ doc, canAct, onChanged }: { doc: DocumentRow
     reload();
   };
 
+  const recheck = async () => {
+    setSigning(true);
+    setNote(null);
+    const { data, error } = await fetchApi<{ signature: string; metadata: string; validation: unknown }>(
+      `/documents/${doc.id}/verify/signature`, { method: 'POST' });
+    setSigning(false);
+    if (!data) return setNote({ kind: 'error', text: error ?? 'The signature check did not run' });
+    setNote({ kind: data.signature === 'valid' ? 'success' : 'warning',
+      text: `Signature: ${(VERIFY_STATUS_LABEL[data.signature] ?? data.signature).toLowerCase()}. File metadata: ${(VERIFY_STATUS_LABEL[data.metadata] ?? data.metadata).toLowerCase()}.${data.validation ? ' Validation ran again.' : ''}` });
+    reload();
+  };
+
   if (error) return <Notice kind="error">{error}</Notice>;
   if (!view) return <Loading what="Loading verification" />;
 
@@ -191,8 +208,12 @@ export function VerificationPanel({ doc, canAct, onChanged }: { doc: DocumentRow
   const hash = latest('HASH');
   const registry = latest('REGISTRY');
   const manual = latest('MANUAL');
+  const signature = latest('SIGNATURE');
+  const metadata = latest('METADATA');
   const current = doc.status === 'current' && doc.integrity_status === 'passed';
-  const earlier = view.checks.filter((c) => c !== hash && c !== registry && c !== manual);
+  const latestOnes = [hash, registry, manual, signature, metadata];
+  const earlier = view.checks.filter((c) => !latestOnes.includes(c));
+  const signer = signature?.response.signatures?.find((x) => x.signer);
 
   return (
     <div className="space-y-4">
@@ -203,6 +224,56 @@ export function VerificationPanel({ doc, canAct, onChanged }: { doc: DocumentRow
           <div className="space-y-1">
             <StateTag check={hash} />
             {hash && <By check={hash} />}
+          </div>
+        </li>
+
+        <li className="grid gap-2 px-4 py-3 sm:grid-cols-[13rem_1fr]">
+          <div>
+            <p className="font-semibold">Signature</p>
+            <p className="text-xs text-ink-2">Embedded PDF signature, against the trust store</p>
+          </div>
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <StateTag check={signature} />
+              {canAct && current && doc.mime === 'application/pdf' && (
+                <button className={`${btnSecondary} px-3 py-1.5`} onClick={recheck} disabled={signing}>
+                  {signing ? 'Checking…' : 'Check signature again'}
+                </button>
+              )}
+            </div>
+            {signature && <By check={signature} />}
+            {signature?.response.note && <p className="text-sm">{signature.response.note}.</p>}
+            {signer && (
+              <p className="text-sm">
+                <span className="text-ink-2">Signer named in the file</span> <Mark>{signer.signer}</Mark>
+                {signer.signer_issuer && <span className="text-ink-2">, issued by {signer.signer_issuer}</span>}
+                {signer.signed_at && <span className="text-ink-2">, signed {formatDateTime(signer.signed_at)}</span>}
+              </p>
+            )}
+            {!signature && doc.mime !== 'application/pdf' && <p className="text-sm text-ink-2">Only a PDF carries an embedded signature.</p>}
+          </div>
+        </li>
+
+        <li className="grid gap-2 px-4 py-3 sm:grid-cols-[13rem_1fr]">
+          <div>
+            <p className="font-semibold">File metadata</p>
+            <p className="text-xs text-ink-2">Indicators only, not a verdict</p>
+          </div>
+          <div className="min-w-0 space-y-2">
+            <StateTag check={metadata} />
+            {metadata && <By check={metadata} />}
+            {(metadata?.response.indicators ?? []).length > 0 && (
+              <ul className="list-disc space-y-1 pl-5 text-sm">
+                {metadata!.response.indicators!.map((i) => <li key={i.code}><Mark>{i.text}</Mark></li>)}
+              </ul>
+            )}
+            {metadata && (
+              <p className="text-xs text-ink-2">
+                Created {formatDateTime(metadata.response.creation_date)}, last modified {formatDateTime(metadata.response.modification_date)}
+                {metadata.response.revisions ? `, ${metadata.response.revisions} revision${metadata.response.revisions > 1 ? 's' : ''}` : ''}
+                {metadata.response.producer ? `, made with ${metadata.response.producer}` : ''}.
+              </p>
+            )}
           </div>
         </li>
 
@@ -277,7 +348,7 @@ export function VerificationPanel({ doc, canAct, onChanged }: { doc: DocumentRow
             <ul className="mt-2 space-y-2 border-l-2 border-rule pl-4 text-sm">
               {earlier.map((c) => (
                 <li key={c.id}>
-                  <span className="font-semibold">{c.method === 'REGISTRY' ? 'Issuer registry (MOCK)' : c.method === 'MANUAL' ? 'Manual check' : 'File check'}</span>{' '}
+                  <span className="font-semibold">{METHOD_NAME[c.method] ?? humanize(c.method)}</span>{' '}
                   <StateTag check={c} />
                   {c.method === 'MANUAL' && c.response.note && <span className="block text-ink-2">{c.response.note}</span>}
                   <By check={c} />
