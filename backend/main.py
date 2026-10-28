@@ -31,6 +31,17 @@ for module in (auth, applications, documents, findings, reference, workflow, ver
     app.include_router(module.router, prefix="/api/v1")
 
 
+@app.get("/", tags=["Root"])
+def root():
+    return {
+        "service": "ProofPath AI API",
+        "version": app.version,
+        "status": "healthy",
+        "docs": "/docs",
+        "health": "/api/v1/health",
+    }
+
+
 @app.get("/health", tags=["Health"])
 def health_check():
     return {"status": "healthy", "service": "proofpath-api", "version": app.version}

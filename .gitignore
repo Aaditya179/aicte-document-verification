@@ -37,6 +37,8 @@ htmlcov/
 .env.production.local
 backend/.env
 frontend/.env.local
+*.env.render*
+*.env.*
 
 # OS
 .DS_Store
