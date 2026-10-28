@@ -3,7 +3,8 @@ The validation engine (build spec section 7). Deterministic Python only: no chec
 
 run_validation(application_id, mode, actor):
   full       reviewer run: records a validation run, writes findings, auto-closes what no longer holds
-  preflight  institution's own check: returns findings, writes nothing, never includes cross-institution types
+  preflight  institution's own check: returns findings, writes nothing, never includes cross-institution
+             types or the reviewer's registry comparison (C15)
   dry_run    rule impact preview: returns findings, writes nothing
 
 Each check reads a snapshot of one application (Context) and returns Findings. A finding's key is
@@ -27,6 +28,8 @@ logger = logging.getLogger("proofpath.validation")
 
 UNRESOLVED = ("open", "evidence_requested")
 CROSS_TYPES = {"REUSED_IDENTIFIER", "GHOST_FACULTY", "PHOTO_REUSE"}
+# Findings that come from a reviewer's own verification, never shown in an institution's pre-flight
+REVIEWER_TYPES = CROSS_TYPES | {"REGISTRY_MISMATCH"}
 
 
 @dataclass
@@ -58,6 +61,7 @@ class Context:
     faculty: list[dict] = field(default_factory=list)       # faculty rows of the current faculty list
     rooms: list[dict] = field(default_factory=list)         # the room table entered for the floor plan
     cross: Optional[crossinst.CrossData] = None             # other institutions' claims; None skips C7 to C9
+    registry: Optional[dict[str, dict]] = None              # document id -> latest REGISTRY check; None skips C15
 
     @property
     def passed(self) -> list[dict]:
@@ -424,6 +428,59 @@ def check_photo_metadata(ctx: Context) -> list[Finding]:
     return out
 
 
+# ------------------------------------------------------------------------------------------------
+# Check C15 (authenticity)
+# ------------------------------------------------------------------------------------------------
+
+def check_registry_mismatch(ctx: Context) -> list[Finding]:
+    """C15: the latest issuer-registry answer for a current document gave values that differ from the
+    values read from it. The comparison is the one stored with the check, so a corrected value needs a
+    new lookup; a replaced document has no lookup yet, so its finding closes."""
+    out = []
+    for doc in ctx.passed:
+        check = (ctx.registry or {}).get(doc["id"])
+        if not check or check.get("status") != "mismatch":
+            continue
+        response = check.get("response") or {}
+        differs = [c for c in response.get("compared") or [] if c.get("same") is False]
+        if not differs:
+            continue
+        mock = " (MOCK)" if check.get("is_mock") else ""
+        label = ctx.label(doc["doc_type"])
+        issuer = response.get("issuer") or "the issuer registry"
+
+        def show(c: dict, value) -> str:
+            return ddmmyyyy(value) if c.get("value_type") == "date" else str(value)
+
+        def in_document(c: dict) -> str:
+            # Dates in one format on both sides; other values as printed
+            return show(c, c["document_value"]) if c.get("value_type") == "date" else str(c["document_shown"] or c["document_value"])
+
+        if len(differs) == 1:
+            c = differs[0]
+            title = (f"{label} {field_label(c['field']).lower()} {in_document(c)} differs from "
+                     f"the issuer registry{mock} record {show(c, c['registry_value'])}")
+        else:
+            title = f"{label}: {len(differs)} values differ from the issuer registry{mock} record"
+        lines = "; ".join(f"{field_label(c['field'])}: document {in_document(c)} "
+                          f"({page_text(c)}), registry {show(c, c['registry_value'])}" for c in differs)
+        ev = []
+        for c in differs:
+            ev.append({"document_id": doc["id"], "page_number": c.get("page_number"), "role": "A",
+                       "label": f"{label}, {field_label(c['field']).lower()}", "shown_value": in_document(c)})
+            ev.append({"document_id": None, "page_number": None, "role": "B",
+                       "label": f"{issuer}{mock}, {field_label(c['field']).lower()}", "shown_value": show(c, c["registry_value"])})
+        out.append(Finding(
+            key=f"REGISTRY_MISMATCH|{ctx.application['code']}|{doc['doc_type']}",
+            finding_type="REGISTRY_MISMATCH", rule_code="R-REG-01", rule_version=ctx.version("R-REG-01"),
+            severity="high", title=title,
+            detail=(f"Looked up by {field_label((response.get('key') or {}).get('field', 'number')).lower()} "
+                    f"{(response.get('key') or {}).get('value', '')} in {issuer}{mock}. {lines}. Candidate for review."),
+            evidence=ev,
+        ))
+    return out
+
+
 # Check, the rule that switches it on, and the finding types it can produce
 CHECKS: list[tuple[str, str, Callable[[Context], list[Finding]], set[str]]] = [
     ("C1", "R-DOC-REQ", check_missing_documents, {"MISSING_DOCUMENT"}),
@@ -438,6 +495,7 @@ CHECKS: list[tuple[str, str, Callable[[Context], list[Finding]], set[str]]] = [
     ("C10", "R-INFRA-01", check_infra_evidence, {"INFRA_EVIDENCE_MISSING"}),
     ("C11", "R-AREA-01", check_area, {"AREA_MISMATCH", "AREA_BELOW_MINIMUM"}),
     ("C12", "R-PHOTOAGE-01", check_photo_metadata, {"PHOTO_METADATA"}),
+    ("C15", "R-REG-01", check_registry_mismatch, {"REGISTRY_MISMATCH"}),
 ]
 
 
@@ -449,10 +507,12 @@ def evaluate(ctx: Context, include_cross: bool = True) -> tuple[list[Finding], s
             continue                          # rule not active on the as-of date: the check does not run
         if types & CROSS_TYPES and (not include_cross or ctx.cross is None):
             continue                          # cross checks not run: their earlier findings are left alone
+        if "REGISTRY_MISMATCH" in types and (not include_cross or ctx.registry is None):
+            continue
         evaluated |= types
         findings.extend(check(ctx))
     if not include_cross:
-        findings = [f for f in findings if not f.is_cross_institution]
+        findings = [f for f in findings if not f.is_cross_institution and f.finding_type not in REVIEWER_TYPES]
     return findings, evaluated
 
 
@@ -481,15 +541,17 @@ def load_context(application: dict, include_cross: bool = True) -> Context:
                 .eq("status", "current").execute().data or [])
         ids = [d["id"] for d in docs]
         if not ids:
-            return docs, [], [], []
-        fields, media, faculty = parallel(
+            return docs, [], [], [], []
+        fields, media, faculty, checks = parallel(
             lambda: db.table("extracted_fields").select("*").in_("document_id", ids).execute().data or [],
             lambda: db.table("media_assets").select("*").in_("document_id", ids).execute().data or [],
             lambda: db.table("faculty").select("*").in_("document_id", ids).execute().data or [],
+            lambda: (db.table("verification_checks").select("*").in_("document_id", ids).eq("method", "REGISTRY")
+                     .execute().data or []) if include_cross else [],
         )
-        return docs, fields, media, faculty
+        return docs, fields, media, faculty, checks
 
-    as_of, (docs, field_rows, media, faculty), category, doc_types, required, pairs, rules, rooms, cross = parallel(
+    as_of, (docs, field_rows, media, faculty, checks), category, doc_types, required, pairs, rules, rooms, cross = parallel(
         as_of_date, documents,
         lambda: db.fetch_one("categories", code=application["category"]) or {},
         lambda: db.fetch_all("document_types"),
@@ -499,6 +561,9 @@ def load_context(application: dict, include_cross: bool = True) -> Context:
         lambda: db.fetch_all("rooms", application_id=application["id"]),
         lambda: crossinst.load(application) if include_cross else None,
     )
+    registry: dict[str, dict] = {}
+    for c in sorted(checks, key=lambda c: c.get("checked_at") or ""):
+        registry[c["document_id"]] = c
     fields: dict[str, list[dict]] = {}
     for f in field_rows:
         fields.setdefault(f["document_id"], []).append(f)
@@ -507,6 +572,7 @@ def load_context(application: dict, include_cross: bool = True) -> Context:
         doc_types={t["code"]: t for t in doc_types}, required=required, pairs=pairs,
         rules=active_rules(as_of, rules), category_label=category.get("label", ""),
         media={m["document_id"]: m for m in media}, faculty=faculty, rooms=rooms, cross=cross,
+        registry=registry if include_cross else None,
     )
 
 
@@ -527,7 +593,8 @@ def has_full_run(application_id: str) -> bool:
 
 def run_validation(application_id: str, mode: str = "full", actor: Optional[AuthenticatedUser] = None,
                    trigger: str = "reviewer") -> dict:
-    """trigger says what started a full run: "reviewer", "document_replaced" or "value_confirmed"."""
+    """trigger says what started a full run: "reviewer", "document_replaced", "value_confirmed" or
+    "registry_checked"."""
     application = db.fetch_one("applications", id=application_id)
     if not application:
         raise LookupError("Application not found")

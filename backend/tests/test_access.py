@@ -51,11 +51,18 @@ def test_reviewer_opens_any_document(fake, client, as_user):
     assert link["url"].startswith("https://storage.test/sign/") and link["expires_in"] <= 600
 
 
-def test_extracted_values_are_for_reviewers_not_institutions(fake, client, as_user):
+def test_an_institution_sees_values_read_from_its_own_documents_only(fake, client, as_user):
+    fake.table("extracted_fields").insert([{"id": "fb", "document_id": "doc-b", "field_name": "institution_code",
+                                            "field_value": "INST-1002", "original_value": "INST-1002", "review_state": "corrected",
+                                            "reviewed_by": "user-reviewer"}]).execute()
+    as_user("institution_a")
+    assert client.get(f"{API}/documents/doc-b/fields").status_code == 404
     as_user("institution_b")
-    assert client.get(f"{API}/documents/doc-b/fields").status_code == 403
+    field = client.get(f"{API}/documents/doc-b/fields").json()["fields"][0]
+    assert field["original_value"] == "INST-1002" and field["review_state"] == "auto"
+    assert "reviewed_by" not in field and "field_value" not in field     # the reviewer's side stays hidden
     as_user("reviewer")
-    assert client.get(f"{API}/documents/doc-b/fields").status_code == 200
+    assert client.get(f"{API}/documents/doc-b/fields").json()["fields"][0]["review_state"] == "corrected"
 
 
 @pytest.mark.parametrize("role", ["reviewer", "rule_admin"])

@@ -5,11 +5,12 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from core.access import application_for
+from core.access import EDITABLE_STATES, application_for
 from core.db import db, parallel
 from core.security import AuthenticatedUser, require_role
 from core.clock import as_of_date
-from services import audit, casefile, priority as priority_service, reviews
+from core.ratelimit import rate_limit
+from services import audit, casefile, preflight as preflight_service, priority as priority_service, reviews
 from services.validation import run_validation
 
 router = APIRouter(tags=["Findings"])
@@ -41,6 +42,15 @@ def validate(application_id: str, user: AuthenticatedUser = Depends(require_role
     statuses, priority = parallel(lambda: casefile.status_view(application, findings),
                                   lambda: casefile.priority_view(application, findings))
     return {**result, "statuses": statuses, "priority": priority}
+
+
+@router.post("/applications/{application_id}/preflight", dependencies=[Depends(rate_limit("20/minute", "preflight"))])
+def preflight(application_id: str, user: AuthenticatedUser = Depends(require_role(["institution"]))):
+    """The institution's own check before submitting: within-application checks only, nothing stored."""
+    application = application_for(user, application_id)
+    if application["workflow_status"] not in EDITABLE_STATES:
+        raise HTTPException(status_code=409, detail="Pre-flight is for an application you can still change")
+    return preflight_service.run(application)
 
 
 @router.get("/applications/{application_id}/statuses")

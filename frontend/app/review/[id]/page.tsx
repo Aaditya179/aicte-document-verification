@@ -13,6 +13,7 @@ import { Checklist, FileCover } from '@/components/FileCover';
 import { FileCheckTag, ReadingTag, documentLink, isBeingRead } from '@/components/documents';
 import { AuditTrail, CitedPage, FieldReview, FindingCard, PriorityLedger, StatusCards, type Citation } from '@/components/findings';
 import { RoomTable } from '@/components/rooms';
+import { VerificationPanel } from '@/components/verification';
 import { Empty, Loading, Mark, Notice, Tag, btnPrimary, btnQuiet, formatDate, formatDateTime, td, th, useMe } from '@/components/ui';
 
 type View = { url: string; mime: string; page: number | null };
@@ -232,6 +233,8 @@ function ReviewApplication() {
     setReview((v) => v + 1);
   };
 
+  const verified = useCallback(() => setReview((v) => v + 1), []);
+
   const reviewed = () => {
     setRunNote({ kind: 'success', text: 'Value recorded and the application validated again.' });
     setReview((v) => v + 1);
@@ -426,6 +429,13 @@ function ReviewApplication() {
               {view?.page && view.mime === 'application/pdf' && <p className="text-sm text-ink-2">Showing page {view.page}.</p>}
 
               <PhotoDetails doc={selected} />
+
+              {selected.integrity_status !== 'pending' && (
+                <div>
+                  <h3 className="mb-2 font-serif text-lg font-bold">Authenticity of this document</h3>
+                  <VerificationPanel doc={selected} canAct={canAct && detail.application.workflow_status !== 'draft'} onChanged={verified} />
+                </div>
+              )}
 
               {selected.integrity_status === 'passed' && (
                 <div>

@@ -15,6 +15,14 @@ function mimeOf(file: File) {
 
 export type UploadStep = 'preparing' | 'uploading' | 'checking' | 'reading' | 'done';
 
+export const UPLOAD_STEP_TEXT: Record<UploadStep, string> = {
+  preparing: 'Checking the file details…',
+  uploading: 'Uploading…',
+  checking: 'Checking the file…',
+  reading: 'Reading the values in it…',
+  done: 'Done',
+};
+
 /**
  * Upload one document (build spec section 6): the API checks the metadata and returns a signed URL,
  * the file goes straight to private storage, the API checks the file, then reads it in the background.

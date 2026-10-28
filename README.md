@@ -45,6 +45,7 @@ In the Supabase dashboard, open the **SQL editor** and run, in order:
 2. `supabase/migrations/0002_rls.sql`: locks the schema to the API. It stops with an error if anything is still open to a browser role.
 3. `supabase/migrations/0003_seed_reference.sql`: categories, document types, checklists, extraction templates and the illustrative rules.
 4. `supabase/migrations/0004_phase3.sql`: version 2 of the faculty-matching rule (ASSUMPTIONS.md A20).
+5. `supabase/migrations/0005_phase4.sql`: the issuer-registry rule R-REG-01 and the MOCK registry setting (ASSUMPTIONS.md A30).
 
 Then go to **Project Settings → Data API → Exposed schemas**, add `proofpath` and save.
 
@@ -104,14 +105,14 @@ proofpath-ai/
 │   └── lib/                 API client, upload flow, Supabase client, types
 ├── backend/                 FastAPI
 │   ├── core/                settings, schema-bound database, roles, access rules, as-of date, rate limits
-│   ├── routers/             auth, applications, documents, findings, reference, workflow
-│   ├── services/            pipeline, extraction, normalise, validation, crossinst, statuses, priority,
+│   ├── routers/             auth, applications, documents, findings, reference, workflow, verification
+│   ├── services/            pipeline, extraction, normalise, validation, crossinst, registry_adapter, preflight, statuses, priority,
 │   │                        reviews, casefile, audit, llm (Groq)
 │   ├── scripts/             evaluate (ground-truth scoring)
 │   ├── schemas/             request bodies
 │   ├── seed/                demo accounts, sample files, the 40-application dataset
 │   └── tests/
-├── supabase/migrations/     0001 schema, 0002 lockdown, 0003 reference data, 0004 phase 3 rule
+├── supabase/migrations/     0001 schema, 0002 lockdown, 0003 reference data, 0004 and 0005 later rules
 ├── design/                  the design tokens
 └── ASSUMPTIONS.md
 ```

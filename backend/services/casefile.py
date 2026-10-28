@@ -78,14 +78,16 @@ def status_view(application: dict, findings: Optional[list[dict]] = None) -> dic
                                       lambda: _in("verification_checks", "document_id", ids))
         return docs, field_rows, checks
 
-    run, found, (documents, field_rows, checks), templates, rooms = parallel(
+    run, found, (documents, field_rows, checks), templates, rooms, labels = parallel(
         lambda: latest_run(application["id"]),
         lambda: findings if findings is not None else db.fetch_all("findings", application_id=application["id"]),
         documents_and_children,
         lambda: db.table("extraction_templates").select("doc_type,field_name").eq("required", True).execute().data or [],
         lambda: db.table("rooms").select("id").eq("application_id", application["id"]).limit(1).execute().data or [],
+        lambda: {t["code"]: t["label"] for t in db.fetch_all("document_types")},
     )
     findings = found
+    documents = [{**d, "label": labels.get(d["doc_type"])} for d in documents]
     doc_type = {d["id"]: d["doc_type"] for d in documents}
     fields = [{**f, "doc_type": doc_type[f["document_id"]]} for f in field_rows]
     required = {(t["doc_type"], t["field_name"]) for t in templates}
@@ -100,6 +102,18 @@ def priority_view(application: dict, findings: Optional[list[dict]] = None) -> d
         as_of_date,
     )
     return priority.compute(found, weights, application.get("review_deadline"), as_of)
+
+
+def _verification(check: dict) -> dict:
+    """One authenticity check as the Case File records it: what was asked, of whom, and the answer."""
+    r = check.get("response") or {}
+    out = {k: check.get(k) for k in ("method", "status", "source", "is_mock", "checked_at")}
+    if check["method"] == "MANUAL":
+        out["detail"] = f"{r.get('contact', '')}. {r.get('note', '')}".strip(". ")
+    elif check["method"] == "REGISTRY":
+        differs = [c["field"].replace("_", " ") for c in r.get("compared") or [] if c.get("same") is False]
+        out["detail"] = (f"Differs: {', '.join(differs)}" if differs else r.get("note", ""))
+    return out
 
 
 def case_file(application: dict) -> dict:
@@ -135,8 +149,8 @@ def case_file(application: dict) -> dict:
             "original_name": d.get("original_name"), "version": d.get("version"), "status": d.get("status"),
             "sha256": d.get("sha256"), "integrity_status": d.get("integrity_status"), "integrity_note": d.get("integrity_note"),
             "uploaded_at": d.get("uploaded_at"),
-            "verification": [{k: c.get(k) for k in ("method", "status", "source", "is_mock", "checked_at")}
-                             for c in checks if c["document_id"] == d["id"]],
+            "verification": [_verification(c) for c in sorted(checks, key=lambda c: c.get("checked_at") or "")
+                             if c["document_id"] == d["id"]],
         } for d in documents],
         "reviewer_actions": sorted(actions, key=lambda a: a["created_at"]),
         "latest_run": {k: run.get(k) for k in ("id", "started_at", "as_of_date", "summary")} if run else None,

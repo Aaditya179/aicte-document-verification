@@ -82,6 +82,9 @@ class FakeQuery:
         if self.op == "insert":
             many = isinstance(self.payload, list)
             new = [{"id": str(uuid.uuid4()), "created_at": _now(), **row} for row in (self.payload if many else [self.payload])]
+            if self.table == "verification_checks":   # checked_at defaults to now() in Postgres
+                for r in new:
+                    r.setdefault("checked_at", r["created_at"])
             if self.table == "rooms":                  # area_sqm is a generated column in Postgres
                 for r in new:
                     r["area_sqm"] = r["length_m"] * r["width_m"]
@@ -120,6 +123,10 @@ class FakeStorage:
 
     def create_signed_url(self, path, expires_in):
         return {"signedURL": f"https://storage.test/sign/{path}?expires={expires_in}"}
+
+    def upload(self, path, data, file_options=None):
+        self.files[path] = data
+        return {"path": path}
 
     def download(self, path):
         if path not in self.files:

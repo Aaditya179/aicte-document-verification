@@ -287,7 +287,7 @@ export interface CaseFile {
   documents: {
     id: string; doc_type: string; label: string; original_name: string | null; version: number; status: string;
     sha256: string | null; integrity_status: string; integrity_note: string | null; uploaded_at: string;
-    verification: { method: string; status: string; source: string | null; is_mock: boolean; checked_at: string }[];
+    verification: { method: string; status: string; source: string | null; is_mock: boolean; checked_at: string; detail?: string }[];
   }[];
   reviewer_actions: (ReviewAction & { finding_title: string; finding_key: string })[];
   latest_run: LatestRun | null;
@@ -384,4 +384,85 @@ export const FINDING_TYPE_LABEL: Record<string, string> = {
   AREA_MISMATCH: 'Area mismatch',
   AREA_BELOW_MINIMUM: 'Area below minimum',
   PHOTO_METADATA: 'Photo date',
+  REGISTRY_MISMATCH: 'Differs from issuer registry',
 };
+
+// Authenticity (build spec 10). Each method keeps its own state; the latest check of a method is its state.
+export type VerifyMethod = 'HASH' | 'SIGNATURE' | 'REGISTRY' | 'METADATA' | 'MANUAL';
+
+export const VERIFY_METHOD_LABEL: Record<string, string> = {
+  HASH: 'File check', SIGNATURE: 'Signature', REGISTRY: 'Issuer registry', METADATA: 'File metadata', MANUAL: 'Manual check with the issuer',
+};
+
+export const VERIFY_STATUS_LABEL: Record<string, string> = {
+  passed: 'Passed', failed: 'Failed',
+  match: 'Matches the registry', mismatch: 'Values differ from the registry', unavailable: 'Source unavailable (pending, not a failure)',
+  manual_pending: 'Asked, waiting for an answer', manual_confirmed: 'Confirmed by the issuer', manual_not_confirmed: 'Issuer did not confirm',
+  valid: 'Valid', invalid: 'Invalid', untrusted_chain: 'Untrusted certificate chain', unsigned: 'Unsigned', unsupported: 'Not supported',
+};
+
+export interface RegistryComparison {
+  field: string;
+  document_value: string | null;
+  document_shown: string | null;
+  page_number: number | null;
+  value_type: string;
+  registry_value: string | null;
+  same: boolean | null;
+}
+
+export interface VerificationCheck {
+  id: string;
+  document_id: string;
+  method: VerifyMethod;
+  source: string | null;
+  status: string;
+  is_mock: boolean;
+  checked_by: string | null;
+  checked_by_name: string | null;
+  checked_at: string;
+  response: {
+    // REGISTRY
+    mode?: string; issuer?: string; key?: { field: string; value: string }; record?: Record<string, string> | null;
+    compared?: RegistryComparison[]; note?: string;
+    // MANUAL
+    contact?: string; attachment?: { name: string; mime: string; size: number } | null;
+    // HASH
+    sha256?: string;
+  };
+}
+
+export interface DocumentVerification {
+  registry: { supported: boolean; issuer: string | null; key_field: string | null; mode: string; is_mock: boolean };
+  checks: VerificationCheck[];
+}
+
+export type RegistryMode = 'unavailable' | 'match' | 'mismatch';
+
+export interface RegistrySetting {
+  mode: RegistryMode;
+  modes: RegistryMode[];
+  is_mock: boolean;
+  documents: { doc_type: string; label: string; issuer: string; key: string; fields: string[] }[];
+}
+
+// Pre-flight (the institution's own check before submitting; nothing is stored)
+export type WizardStep = 'details' | 'documents' | 'evidence' | 'preflight' | 'submit';
+
+export interface PreflightItem {
+  key: string;
+  finding_type: string;
+  rule_code: string;
+  severity: string;
+  title: string;
+  detail: string;
+  evidence: { document_id: string | null; page_number: number | null; role: string; label: string | null; shown_value: string | null }[];
+  fix: { step: WizardStep; doc_type?: string | null; category?: string | null; anchor?: string; hint: string };
+}
+
+export interface PreflightResult {
+  as_of_date: string;
+  rule_versions: Record<string, number>;
+  items: PreflightItem[];
+  stored: false;
+}

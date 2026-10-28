@@ -16,7 +16,7 @@ type NavLink = { href: string; label: string };
 const NAV_LINKS: Record<Role, NavLink[]> = {
   institution: [{ href: '/institution', label: 'Your applications' }],
   reviewer: [{ href: '/review', label: 'Review queue' }, { href: '/review/cross', label: 'Across institutions' }],
-  rule_admin: [{ href: '/admin/rules', label: 'Rules' }],
+  rule_admin: [{ href: '/admin/rules', label: 'Rules' }, { href: '/admin/settings', label: 'Settings' }],
 };
 
 const HIDDEN_ON = ['/login', '/welcome', '/mfa'];

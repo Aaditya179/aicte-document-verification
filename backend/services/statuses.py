@@ -9,6 +9,8 @@ status is separate and always "Pending (authorised AICTE official)".
 """
 from typing import Optional
 
+from services.registry_adapter import REGISTRY_DOCUMENTS
+
 CONFLICT_TYPES = {"DATE_CONFLICT", "ID_MISMATCH", "COUNT_CONFLICT", "DATE_ORDER_INVALID"}
 CROSS_TYPES = {"REUSED_IDENTIFIER", "GHOST_FACULTY", "PHOTO_REUSE"}
 COMPLIANCE_TYPES = {"MISSING_DOCUMENT", "EXPIRED_DOCUMENT", "AREA_MISMATCH", "AREA_BELOW_MINIMUM", "INFRA_EVIDENCE_MISSING"}
@@ -19,6 +21,61 @@ ADMINISTRATIVE = "Pending (authorised AICTE official)"
 
 def _status(key: str, label: str, value: str, tone: str, reasons: Optional[list[str]] = None) -> dict:
     return {"key": key, "label": label, "value": value, "tone": tone, "reasons": reasons or []}
+
+
+def _doc_label(d: dict) -> str:
+    return d.get("label") or (d.get("doc_type") or "document").replace("_", " ").capitalize()
+
+
+def _authenticity(documents: list[dict], checks: list[dict], problem_findings: list[str]) -> dict:
+    """The latest check per document and method decides that method's state; methods never override
+    each other, and the worst state over all documents wins. An unavailable source is Pending, never
+    a failure. Every reason names the document and the method, and a MOCK source says so."""
+    labels = {d["id"]: _doc_label(d) for d in documents}
+    latest: dict[tuple, dict] = {}
+    for c in sorted(checks, key=lambda c: c.get("checked_at") or ""):
+        if c["method"] in ("SIGNATURE", "REGISTRY", "MANUAL"):
+            latest[(c["document_id"], c["method"])] = c
+
+    def line(c: dict, what: str) -> str:
+        source = {"SIGNATURE": "signature", "REGISTRY": "issuer registry" + (" (MOCK)" if c.get("is_mock") else ""),
+                  "MANUAL": f"manual check with {c.get('source') or 'the issuer'}"}[c["method"]]
+        return f"{labels.get(c['document_id'], 'A document')}, {source}: {what}"
+
+    bad_signature = [c for c in latest.values() if c["method"] == "SIGNATURE" and c.get("status") in ("invalid", "untrusted_chain")]
+    bad_source = [c for c in latest.values() if (c["method"], c.get("status")) in (("REGISTRY", "mismatch"), ("MANUAL", "manual_not_confirmed"))]
+    waiting = [c for c in latest.values() if (c["method"], c.get("status")) == ("MANUAL", "manual_pending")]
+    unavailable = [c for c in latest.values() if (c["method"], c.get("status")) == ("REGISTRY", "unavailable")]
+    good = [c for c in latest.values() if (c["method"], c.get("status")) in
+            (("SIGNATURE", "valid"), ("REGISTRY", "match"), ("MANUAL", "manual_confirmed"))]
+
+    if bad_signature or bad_source:
+        value = ("Signature invalid or source mismatch" if bad_signature and bad_source
+                 else "Signature invalid" if bad_signature else "Source mismatch")
+        reasons = [line(c, "signature " + c["status"].replace("_", " ")) for c in bad_signature]
+        reasons += [line(c, "values differ" if c["method"] == "REGISTRY" else "the issuer did not confirm it") for c in bad_source]
+        return _status("authenticity", "Authenticity", value, "conflict", reasons + problem_findings)
+    if waiting:
+        return _status("authenticity", "Authenticity", "Manual verification pending", "pending",
+                       [line(c, "asked, waiting for an answer") for c in waiting])
+    if unavailable:
+        mock = " (MOCK source)" if all(c.get("is_mock") for c in unavailable) else ""
+        return _status("authenticity", "Authenticity", "Pending (source unavailable)" + mock, "pending",
+                       [line(c, "source unavailable, not a failure") for c in unavailable])
+    if good:
+        kinds = {c["method"] == "SIGNATURE" for c in good}
+        value = "Signature valid or source verified" if len(kinds) == 2 else "Signature valid" if True in kinds else "Source verified"
+        if all(c.get("is_mock") for c in good):
+            value += " (MOCK source)"
+        checked = {c["document_id"] for c in good}
+        reasons = [line(c, "matches" if c["method"] == "REGISTRY" else "valid" if c["method"] == "SIGNATURE" else "confirmed") for c in good]
+        # Documents an issuer registry holds that no method has checked yet
+        unchecked = sorted(_doc_label(d) for d in documents if d["doc_type"] in REGISTRY_DOCUMENTS
+                           and d["id"] not in checked and d["id"] not in {k[0] for k in latest})
+        if unchecked:
+            reasons.append(f"Not checked yet: {', '.join(unchecked)}")
+        return _status("authenticity", "Authenticity", value, "ok", reasons)
+    return _status("authenticity", "Authenticity", "Not yet verified", "neutral")
 
 
 def compute(has_run: bool, findings: list[dict], documents: list[dict], fields: list[dict],
@@ -60,24 +117,7 @@ def compute(has_run: bool, findings: list[dict], documents: list[dict], fields: 
     else:
         consistency = _status("consistency", "Consistency", "Consistent", "ok")
 
-    # Authenticity: the latest check per document and method decides
-    latest: dict[tuple, dict] = {}
-    for c in sorted(checks, key=lambda c: c.get("checked_at") or ""):
-        latest[(c["document_id"], c["method"])] = c
-    auth = [c for (_, method), c in latest.items() if method in ("SIGNATURE", "REGISTRY", "MANUAL")]
-    statuses = {(c["method"], c.get("status")) for c in auth}
-    mock = any(c.get("is_mock") for c in auth)
-    suffix = " (MOCK source)" if mock else ""
-    if ("SIGNATURE", "invalid") in statuses or ("SIGNATURE", "untrusted_chain") in statuses or ("REGISTRY", "mismatch") in statuses:
-        authenticity = _status("authenticity", "Authenticity", "Signature invalid or source mismatch", "conflict", of_type({"SIGNATURE_INVALID", "REGISTRY_MISMATCH"}))
-    elif ("MANUAL", "manual_pending") in statuses:
-        authenticity = _status("authenticity", "Authenticity", "Manual verification pending", "pending")
-    elif ("REGISTRY", "unavailable") in statuses:
-        authenticity = _status("authenticity", "Authenticity", "Pending (source unavailable)" + suffix, "pending")
-    elif ("SIGNATURE", "valid") in statuses or ("REGISTRY", "match") in statuses or ("MANUAL", "manual_confirmed") in statuses:
-        authenticity = _status("authenticity", "Authenticity", "Signature valid or source verified" + suffix, "ok")
-    else:
-        authenticity = _status("authenticity", "Authenticity", "Not yet verified", "neutral")
+    authenticity = _authenticity(documents, checks, of_type({"SIGNATURE_INVALID", "REGISTRY_MISMATCH"}))
 
     # Compliance
     compliance_findings = of_type(COMPLIANCE_TYPES)

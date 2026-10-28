@@ -4,12 +4,10 @@ import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
-import { CATEGORY_LABEL, FINDING_STATUS_LABEL, WORKFLOW_LABEL, humanize, type CaseFile } from '@/lib/types';
+import { CATEGORY_LABEL, FINDING_STATUS_LABEL, VERIFY_METHOD_LABEL, VERIFY_STATUS_LABEL, WORKFLOW_LABEL, humanize, type CaseFile } from '@/lib/types';
 import { Empty, FileNumber, Loading, Mark, Notice, Tag, btnPrimary, btnQuiet, btnSecondary, formatDate, formatDateTime, td, th } from '@/components/ui';
 
 type Snapshot = { id: string; created_at: string };
-
-const VERIFY_LABEL: Record<string, string> = { SIGNATURE: 'Signature', REGISTRY: 'Issuer registry', MANUAL: 'Manual check' };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -148,8 +146,12 @@ function CaseFileView() {
                   <td className={td}>{d.version}{d.status === 'superseded' && ', replaced'}</td>
                   <td className={td}>{d.integrity_status === 'passed' ? 'Passed' : d.integrity_status === 'failed' ? `Failed: ${d.integrity_note ?? ''}` : 'Not checked'}</td>
                   <td className={td}>
-                    {d.verification.length === 0 ? 'Not yet verified' : d.verification.map((v, i) => (
-                      <span key={i} className="block">{VERIFY_LABEL[v.method] ?? humanize(v.method.toLowerCase())}: {humanize(v.status)}{v.is_mock && ' (MOCK)'}</span>
+                    {d.verification.filter((v) => v.method !== 'HASH').length === 0 ? 'Not yet verified' : d.verification.filter((v) => v.method !== 'HASH').map((v, i) => (
+                      <span key={i} className="mb-1 block">
+                        <span className="font-semibold">{VERIFY_METHOD_LABEL[v.method] ?? humanize(v.method.toLowerCase())}{v.is_mock && ' (MOCK)'}</span>:{' '}
+                        {VERIFY_STATUS_LABEL[v.status] ?? humanize(v.status)}, {formatDate(v.checked_at)}
+                        {v.detail && <span className="block text-xs text-ink-2">{v.detail}</span>}
+                      </span>
                     ))}
                   </td>
                   <td className={`${td} max-w-40 break-all text-xs tabular-nums`}>{d.sha256 ?? '—'}</td>

@@ -4,21 +4,13 @@ import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
-import { uploadDocument, type UploadStep } from '@/lib/upload';
+import { UPLOAD_STEP_TEXT, uploadDocument, type UploadStep } from '@/lib/upload';
 import { PHOTO_CATEGORY_LABEL, type ApplicationDetail, type DocumentRow, type Reference } from '@/lib/types';
 import { Checklist, FileCover } from '@/components/FileCover';
 import { EvidenceRequests } from '@/components/requests';
 import { RoomTable } from '@/components/rooms';
 import { FileCheckTag, ReadingTag, isBeingRead, openDocument } from '@/components/documents';
 import { Empty, Loading, Notice, btnPrimary, btnQuiet, formatBytes, formatDateTime, input, label, td, th } from '@/components/ui';
-
-const STEP_TEXT: Record<UploadStep, string> = {
-  preparing: 'Checking the file details…',
-  uploading: 'Uploading…',
-  checking: 'Checking the file…',
-  reading: 'Reading the values in it…',
-  done: 'Done',
-};
 
 function UploadForm({ applicationId, reference, onUploaded }: {
   applicationId: string;
@@ -78,7 +70,7 @@ function UploadForm({ applicationId, reference, onUploaded }: {
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-4">
         <button type="submit" className={btnPrimary} disabled={!file || busy}>{busy ? 'Uploading…' : 'Upload'}</button>
-        {step && <p className="text-sm text-ink-2" role="status" aria-live="polite">{STEP_TEXT[step]}</p>}
+        {step && <p className="text-sm text-ink-2" role="status" aria-live="polite">{UPLOAD_STEP_TEXT[step]}</p>}
       </div>
       {result && <div className="mt-4"><Notice kind={result.kind}>{result.text}</Notice></div>}
     </form>
@@ -177,7 +169,18 @@ function ApplicationPage() {
     <div className="mx-auto w-full max-w-5xl space-y-10 px-4 py-8 sm:px-6">
       <div>
         <Link href="/institution" className={btnQuiet}>Your applications</Link>
-        <div className="mt-4"><FileCover detail={detail} /></div>
+        <div className="mt-4">
+          <FileCover detail={detail}>
+            {editable && (
+              <p className="mt-4 text-sm">
+                <Link href={`/institution/applications/new?application=${id}&step=${detail.application.workflow_status === 'draft' ? 'documents' : 'preflight'}`} className={btnPrimary}>
+                  {detail.application.workflow_status === 'draft' ? 'Continue in guided steps' : 'Run the pre-flight check'}
+                </Link>
+                <span className="ml-3 text-ink-2">Upload by document, see what was read, and check what to fix before submitting.</span>
+              </p>
+            )}
+          </FileCover>
+        </div>
       </div>
 
       <Checklist detail={detail} />

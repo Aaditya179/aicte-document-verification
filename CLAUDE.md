@@ -25,7 +25,7 @@ ProofPath was started on 2026-10-28 from **Nirikshan** (SIH26262, AICTE approval
 
 ## Status
 
-**Phases 0 to 3 done on 28/10/2026.** Phases 2 and 3 are not yet committed; the user verifies and pushes. Migration `0004_phase3.sql` is written but not yet applied in the SQL editor (its data is already live, written through the API). The next step is phase 4 (MANUAL and REGISTRY (mock) checks, the authenticity status, the pre-flight wizard).
+**Phases 0 to 4 done on 28/10/2026.** Phase 4 is not yet committed; the user verifies and pushes. Migrations `0004_phase3.sql` and `0005_phase4.sql` still need running in the SQL editor for a fresh setup (their data is already live, written through the API). The next step is phase 5 (rules lifecycle, four-eyes approval, impact preview, settings screens, signature and metadata checks).
 
 Phase 1 built:
 - Migrations `0001_proofpath_schema.sql` (spec tables in the `proofpath` schema, audit functions `audit_append`, `audit_verify`, `rule_ver`), `0002_rls.sql` (lockdown), `0003_seed_reference.sql` (categories, document types, checklists, extraction templates, comparison pairs, the 14 illustrative rules, priority weights). Applied on 28/10/2026; `proofpath` is an exposed schema.
@@ -47,6 +47,12 @@ Phase 3 built:
 - Seed: 10 more applications at INST-2016 to INST-2025 (shared faculty pair, look-alike, photo reuse pair, reused survey number pair, area mismatch, stale photo, missing library photo) and room tables for all. Live evaluation over 40 applications: 17 true positives, 0 false positives, 0 false negatives; clean control and look-alike not flagged.
 - `core/db.py` resends reads, updates and deletes once after a dropped connection or a gateway 502 (never inserts). The seed reports applications left incomplete by an interrupted upload.
 - Tests: `tests/test_phase3.py` (97 tests in all).
+
+Phase 4 built:
+- `services/registry_adapter.py` (MOCK issuer registry: modes unavailable (default), match, mismatch; ASSUMPTIONS A30, A31), `routers/verification.py` (`POST /documents/{id}/verify/registry` and `/verify/manual` with an optional attachment, `GET /documents/{id}/verification`, attachment link, `GET` and `PUT /admin/settings/registry`), check C15 (`R-REG-01`, `0005_phase4.sql`), Authenticity with reasons per document and method (`statuses.py`).
+- `services/preflight.py` and `POST /applications/{id}/preflight` (institution only, nothing stored, no cross or C15, fix links). Institutions may read the values read from their own documents (A36).
+- Frontend: `components/verification.tsx` (one row per method on the case page), the wizard `/institution/applications/new` with `components/prepare.tsx` (details, documents with values read, infrastructure and room table, pre-flight, submit), `/admin/settings` (registry mode). The Case File lists every check with its answer.
+- Tests: `tests/test_phase4.py` (108 tests in all). The live evaluation is unchanged: 17 true positives, 0 false positives, 0 false negatives.
 
 ## Roles
 

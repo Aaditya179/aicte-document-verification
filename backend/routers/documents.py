@@ -70,12 +70,23 @@ def document_link(document_id: str, user: AuthenticatedUser = Depends(require_ro
     return {"url": url, "expires_in": settings.SIGNED_LINK_TTL_SECONDS, "mime": document["mime"]}
 
 
+# What an institution sees of the values read from its own documents: the reading, not the review
+INSTITUTION_FIELD_KEYS = ("id", "field_name", "original_value", "value_type", "page_number", "source_method",
+                          "confidence", "review_state", "review_reason")
+
+
 @router.get("/documents/{document_id}/fields")
-def document_fields(document_id: str, user: AuthenticatedUser = Depends(require_role(READ_ALL))):
-    """The values read from the document, each with its page, how it was read and whether it needs confirming."""
+def document_fields(document_id: str, user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
+    """The values read from the document, each with its page, how it was read and whether it needs confirming.
+    An institution sees this for its own documents, so it can tell at upload whether a file read well."""
     document, _ = document_for(user, document_id)
     fields = db.table("extracted_fields").select("*").eq("document_id", document_id).order("field_name").execute().data or []
     faculty = []
     if document["doc_type"] == "faculty_list":
         faculty = db.table("faculty").select("*").eq("document_id", document_id).order("faculty_code").execute().data or []
+    if user.role == "institution":
+        fields = [{k: f.get(k) for k in INSTITUTION_FIELD_KEYS} for f in fields]
+        for f in fields:                              # a reviewer's confirmation or correction stays on their side
+            if f["review_state"] in ("confirmed", "corrected"):
+                f["review_state"] = "auto"
     return {"fields": fields, "faculty": faculty}
