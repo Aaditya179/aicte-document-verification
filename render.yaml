@@ -1,0 +1,65 @@
+services:
+  # ---------------------------------------------------------------------------
+  # Backend API (FastAPI)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: proofpath-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.5
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_SCHEMA
+        value: proofpath
+      - key: STORAGE_BUCKET
+        value: proofpath-documents
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: CORS_ORIGIN_REGEX
+        value: ^https://.*\.onrender\.com$
+      - key: DEMO_MFA_BYPASS
+        value: "true"
+      - key: DEMO_PASSWORD
+        value: password123
+      - key: AS_OF_DATE_MODE
+        value: fixed
+      - key: AS_OF_DATE
+        value: 2026-11-01
+      - key: OCR_ENABLED
+        value: "false"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_API_KEY_FAILSAFE
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Frontend Web App (Next.js)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: proofpath-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
