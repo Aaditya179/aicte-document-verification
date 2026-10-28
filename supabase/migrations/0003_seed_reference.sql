@@ -41,30 +41,30 @@ insert into proofpath.required_documents (category, doc_type) values
 on conflict (category, doc_type) do nothing;
 
 insert into proofpath.extraction_templates (doc_type, field_name, value_type, regex, required) values
-  ('application_form', 'institution_code',                 'text',   '^\s*Institution code\s*:\s*([A-Z0-9][A-Z0-9/-]*)', true),
+  ('application_form', 'institution_code',                 'text',   '^\s*Institution code\s*:\s*([A-Z0-9][A-Z0-9/ .-]*?)\s*$', true),
   ('application_form', 'institution_name',                 'text',   '^\s*Institution name\s*:\s*(.+?)\s*$', true),
   ('application_form', 'declared_faculty_count',           'int',    '^\s*Number of faculty\s*:\s*([\d,]+)', true),
   ('application_form', 'declared_total_area_sqm',          'number', '^\s*Total built-up area\s*:\s*([\d,]+(?:\.\d+)?)', true),
   ('application_form', 'declared_certificate_valid_until', 'date',   '^\s*Approval valid until\s*:\s*(.+?)\s*$', false),
-  ('application_form', 'declared_fire_noc_no',             'text',   '^\s*Fire NOC (?:no\.?|number)\s*:\s*([A-Z0-9][A-Z0-9/-]*)', false),
+  ('application_form', 'declared_fire_noc_no',             'text',   '^\s*Fire NOC (?:no\.?|number)\s*:\s*([A-Z0-9][A-Z0-9/ .-]*?)\s*$', false),
   ('application_form', 'survey_no',                        'text',   '^\s*Survey (?:no\.?|number)\s*:\s*([0-9][0-9A-Za-z/ -]*?)\s*$', false),
 
-  ('approval_certificate', 'certificate_no',   'text', '^\s*Certificate (?:no\.?|number)\s*:\s*([A-Z0-9][A-Z0-9/-]*)', true),
-  ('approval_certificate', 'institution_code', 'text', '^\s*Institution code\s*:\s*([A-Z0-9][A-Z0-9/-]*)', true),
+  ('approval_certificate', 'certificate_no',   'text', '^\s*Certificate (?:no\.?|number)\s*:\s*([A-Z0-9][A-Z0-9/ .-]*?)\s*$', true),
+  ('approval_certificate', 'institution_code', 'text', '^\s*Institution code\s*:\s*([A-Z0-9][A-Z0-9/ .-]*?)\s*$', true),
   ('approval_certificate', 'issue_date',       'date', '^\s*Date of issue\s*:\s*(.+?)\s*$', true),
   ('approval_certificate', 'expiry_date',      'date', '^\s*Valid until\s*:\s*(.+?)\s*$', true),
 
-  ('fire_noc', 'noc_no',      'text', '^\s*NOC (?:no\.?|number)\s*:\s*([A-Z0-9][A-Z0-9/-]*)', true),
+  ('fire_noc', 'noc_no',      'text', '^\s*NOC (?:no\.?|number)\s*:\s*([A-Z0-9][A-Z0-9/ .-]*?)\s*$', true),
   ('fire_noc', 'issue_date',  'date', '^\s*Date of issue\s*:\s*(.+?)\s*$', true),
   ('fire_noc', 'expiry_date', 'date', '^\s*Valid until\s*:\s*(.+?)\s*$', true),
 
   ('land_document', 'survey_no',       'text',   '^\s*Survey (?:no\.?|number)\s*:\s*([0-9][0-9A-Za-z/ -]*?)\s*$', true),
-  ('land_document', 'registration_no', 'text',   '^\s*Registration (?:no\.?|number)\s*:\s*([A-Z0-9][A-Z0-9/-]*)', false),
+  ('land_document', 'registration_no', 'text',   '^\s*Registration (?:no\.?|number)\s*:\s*([A-Z0-9][A-Z0-9/ .-]*?)\s*$', false),
   ('land_document', 'land_area_sqm',   'number', '^\s*Land area\s*:\s*([\d,]+(?:\.\d+)?)', false),
 
   ('faculty_list', 'faculty_total', 'int', '^\s*Total faculty\s*:\s*([\d,]+)', true),
 
-  ('affidavit', 'institution_code', 'text', '^\s*Institution code\s*:\s*([A-Z0-9][A-Z0-9/-]*)', true),
+  ('affidavit', 'institution_code', 'text', '^\s*Institution code\s*:\s*([A-Z0-9][A-Z0-9/ .-]*?)\s*$', true),
   ('affidavit', 'affidavit_date',   'date', '^\s*Date\s*:\s*(.+?)\s*$', true)
 on conflict (doc_type, field_name) do update set value_type = excluded.value_type, regex = excluded.regex,
   required = excluded.required;

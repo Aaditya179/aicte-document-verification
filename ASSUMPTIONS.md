@@ -36,7 +36,13 @@ because the spec conflicts with the rules for the Supabase project ProofPath sha
 | A7 | Python dependencies | Added in the phase that first needs them, not all up front |
 | A8 | Trigram index on faculty names | Not created. Name matching (C8) runs in Python with RapidFuzz, and `pg_trgm` may sit in a different schema in the shared project |
 | A9 | Document viewer | The browser's own PDF viewer in an iframe, opened at a page with `#page=N`, instead of `pdfjs-dist`. A fresh signed link is fetched for each page jump, since links last 5 minutes |
-| A10 | Sample files | `seed/samples.py` writes a few synthetic PDFs and a photo with PyMuPDF and Pillow for trying uploads by hand. The full generated dataset (spec 14) comes with phase 2 |
+| A10 | Sample files | `seed/samples.py` writes a few synthetic PDFs and a photo with PyMuPDF and Pillow for trying uploads by hand. The full dataset (spec 14) is `seed/seed.py`, which builds its PDFs with PyMuPDF rather than ReportLab, so no new dependency is needed |
 | A11 | Review deadline | Set to the as-of date plus 30 days when an institution submits |
 | A12 | Extracted values | Visible to reviewers and rule admins. Institutions see the file check and reading status of their documents, not the values, until the pre-flight check in phase 4 |
 | A13 | Faculty list line format | `code \| name \| designation \| qualification \| masked ID \| period start \| period end`, documented in `services/extraction.py` |
+| A14 | Date order (C3) in the statuses | A `DATE_ORDER_INVALID` finding counts under **Consistency** (Conflict detected), with the other conflicts between values. Spec 7.3 does not place it |
+| A15 | As-of date | Read first from the `as_of` row in `proofpath.settings` (`{"mode": "fixed", "date": "2026-11-01"}`, set by `seed/seed.py`), then from `AS_OF_DATE_MODE` and `AS_OF_DATE`. Every reviewer and every run then sees the same date as the seeded dataset |
+| A16 | Identifier templates | The extraction regexes for codes and numbers capture `[A-Z0-9][A-Z0-9/ .-]*?` up to the end of the line, so a value such as `FIRE/NASH/2026/1101` is read whole. Changed in `0003` and in the live rows |
+| A17 | Sign-in cache | A verified token and its member row are kept for 30 seconds (never past the token's expiry), so each request does not make two extra round trips to Supabase. A signed-out token or a changed role therefore takes effect within 30 seconds |
+| A18 | Reopening a finding | A resolved or dismissed finding stays closed when a later run finds the same condition; only open findings are updated or closed automatically. Reopening by hand is not in phase 2 |
+| A19 | Cross-institution group | The case page shows the "Across institutions" group from phase 2, empty until checks C7 to C9 arrive in phase 3 |

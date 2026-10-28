@@ -18,7 +18,7 @@ UPLOAD_LIMIT = Depends(rate_limit("30/minute", "upload"))
 
 
 @router.post("/applications/{application_id}/documents/init", status_code=201, dependencies=[UPLOAD_LIMIT])
-async def init_upload(application_id: str, body: UploadInit,
+def init_upload(application_id: str, body: UploadInit,
                       user: AuthenticatedUser = Depends(require_role(["institution"]))):
     application = application_for(user, application_id)
     require_editable(application)
@@ -33,7 +33,7 @@ async def init_upload(application_id: str, body: UploadInit,
 
 
 @router.post("/documents/{document_id}/finalize", dependencies=[UPLOAD_LIMIT])
-async def finalize_upload(document_id: str, background: BackgroundTasks,
+def finalize_upload(document_id: str, background: BackgroundTasks,
                           user: AuthenticatedUser = Depends(require_role(["institution"]))):
     document, _ = document_for(user, document_id)
     try:
@@ -47,7 +47,7 @@ async def finalize_upload(document_id: str, background: BackgroundTasks,
 
 
 @router.get("/documents/{document_id}")
-async def get_document(document_id: str, user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
+def get_document(document_id: str, user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
     document, application = document_for(user, document_id)
     media = db.fetch_one("media_assets", document_id=document_id)
     out = public_document(document, media["category"] if media else None)
@@ -58,7 +58,7 @@ async def get_document(document_id: str, user: AuthenticatedUser = Depends(requi
 
 
 @router.get("/documents/{document_id}/signed-url")
-async def document_link(document_id: str, user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
+def document_link(document_id: str, user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
     """A short-lived link to view the file. The bucket is private; links expire after a few minutes."""
     document, _ = document_for(user, document_id)
     if document["integrity_status"] == "pending":
@@ -71,7 +71,7 @@ async def document_link(document_id: str, user: AuthenticatedUser = Depends(requ
 
 
 @router.get("/documents/{document_id}/fields")
-async def document_fields(document_id: str, user: AuthenticatedUser = Depends(require_role(READ_ALL))):
+def document_fields(document_id: str, user: AuthenticatedUser = Depends(require_role(READ_ALL))):
     """The values read from the document, each with its page, how it was read and whether it needs confirming."""
     document, _ = document_for(user, document_id)
     fields = db.table("extracted_fields").select("*").eq("document_id", document_id).order("field_name").execute().data or []

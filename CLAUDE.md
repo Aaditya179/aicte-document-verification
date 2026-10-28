@@ -25,14 +25,20 @@ ProofPath was started on 2026-10-28 from **Nirikshan** (SIH26262, AICTE approval
 
 ## Status
 
-**Phases 0 (setup) and 1 (foundation) done on 28/10/2026.** The next step is phase 2 (core validation: checks C1 to C6, statuses, priority, case page, review actions, Case File, the 30-application seed).
+**Phases 0 (setup), 1 (foundation) and 2 (core validation) done on 28/10/2026.** Phase 2 is not yet committed; the user verifies and pushes. The next step is phase 3 (C7 to C9 across institutions, rooms and C10 to C12, the needs-confirmation flow, priority queue, notifications, evidence requests on the institution side, document versions with auto-close).
 
 Phase 1 built:
-- Migrations `0001_proofpath_schema.sql` (spec tables in the `proofpath` schema, audit functions `audit_append`, `audit_verify`, `rule_ver`), `0002_rls.sql` (lockdown: RLS on, no browser grants), `0003_seed_reference.sql` (categories, document types, checklists, extraction templates, comparison pairs, the 14 illustrative rules, priority weights). **Applied on 28/10/2026**, and `proofpath` is an exposed schema. The browser's anon key gets `permission denied for schema proofpath` (checked).
-- Backend: `core/access.py` (who sees which application; another institution's reads as 404), `services/pipeline.py` (signed upload, file check, versions, background reading), `services/extraction.py` (PDF text, OCR fallback, templates, faculty lines, photo hash and EXIF), `services/normalise.py`, `services/audit.py` (calls the SQL hash chain). Routes: applications, documents, `/reference`, `/demo/accounts`, `/rules` (read-only), `/audit/verify`.
-- Frontend: welcome, login, MFA, `/institution`, `/institution/applications/[id]` (upload and documents), `/review`, `/review/[id]` (documents beside the values read from them, click a value to open its page), `/admin/rules` (read-only).
-- Seed: `seed/demo.py` (5 accounts, 2 institutions, 1 draft application each), `seed/samples.py` (synthetic files for trying uploads). Both run on the live project on 28/10/2026. The acceptance check uploaded the five sample files to Aarohan's draft `INST-1001-2027-28-01`.
-- Tests: `tests/test_access.py`, `tests/test_upload_pipeline.py`, `tests/test_normalise_extraction.py`, run against the in-memory database in `tests/fakedb.py`.
+- Migrations `0001_proofpath_schema.sql` (spec tables in the `proofpath` schema, audit functions `audit_append`, `audit_verify`, `rule_ver`), `0002_rls.sql` (lockdown), `0003_seed_reference.sql` (categories, document types, checklists, extraction templates, comparison pairs, the 14 illustrative rules, priority weights). Applied on 28/10/2026; `proofpath` is an exposed schema.
+- Backend: `core/access.py` (another institution's application reads as 404), `services/pipeline.py` (signed upload, file check, versions, background reading), `services/extraction.py`, `services/normalise.py`, `services/audit.py`. Routes: applications, documents, `/reference`, `/demo/accounts`, `/rules` (read-only), `/audit/verify`.
+- Frontend: welcome, login, MFA, `/institution`, `/institution/applications/[id]`, `/review`, `/review/[id]`, `/admin/rules` (read-only).
+- Seed: `seed/demo.py` (5 accounts), `seed/samples.py`.
+
+Phase 2 built:
+- `services/validation.py` (checks C1 to C6, modes full, preflight and dry_run, stable finding keys, auto-close), `statuses.py` (the four statuses), `priority.py` (score with its composition), `reviews.py` (resolve, dismiss, request evidence, each with a reason), `casefile.py`. Routes in `routers/findings.py`: validate, statuses, priority, findings, actions, Case File and snapshots, `/audit`.
+- Frontend: the case page `/review/[id]` (status cards, Run validation, findings within and across institutions with A and B side by side, cited page viewer, priority ledger, actions, audit trail with chain check) and the printable `/review/[id]/casefile` with Save snapshot. Components in `components/findings.tsx`.
+- Seed: `seed/seed.py` (16 institutions, 30 applications, 8 scenarios, `ground_truth.json`, as-of 01/11/2026), ran live. `scripts/evaluate.py` gives 8 true positives, 0 false positives, 0 false negatives, and 22 of 22 clean applications unflagged.
+- Speed: `core/db.py` keeps one pooled HTTP/1.1 PostgREST client (`client.schema()` used to open a new connection per query) and `parallel()` runs independent queries at once; sign-ins are cached for 30 seconds; route handlers are plain `def`. One Supabase round trip is about 0.2s, so keep sequential queries few.
+- Tests: `tests/test_validation.py`, `tests/test_review_flow.py` (71 tests in all).
 
 ## Roles
 
@@ -54,6 +60,8 @@ cd backend && PYTHONPATH=. .venv/bin/uvicorn main:app --reload --port 8001
 PYTHONPATH=. .venv/bin/pytest -q
 PYTHONPATH=. .venv/bin/python -m seed.demo     # needs migrations 0001-0003 applied first
 PYTHONPATH=. .venv/bin/python -m seed.samples  # synthetic files to upload by hand
+PYTHONPATH=. .venv/bin/python -m seed.seed     # the 30-application dataset; --reset is a dry run without --yes
+PYTHONPATH=. .venv/bin/python -m scripts.evaluate  # with the API running: scores against seed/ground_truth.json
 
 # Frontend (port 3001)
 cd frontend && npm run dev

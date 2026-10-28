@@ -35,7 +35,7 @@ def _documents_of(application_ids: list[str]) -> list[dict]:
 
 
 @router.get("")
-async def list_applications(user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
+def list_applications(user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
     query = db.table("applications").select("*").order("created_at", desc=True)
     if user.role == "institution":
         query = query.eq("institution_id", user.institution_id)
@@ -60,7 +60,7 @@ async def list_applications(user: AuthenticatedUser = Depends(require_role(ANY_R
 
 
 @router.post("", status_code=201)
-async def create_application(body: ApplicationCreate, user: AuthenticatedUser = Depends(require_role(["institution"]))):
+def create_application(body: ApplicationCreate, user: AuthenticatedUser = Depends(require_role(["institution"]))):
     institution = db.fetch_one("institutions", id=user.institution_id)
     if not institution:
         raise HTTPException(status_code=409, detail="Your account is not linked to an institution")
@@ -80,7 +80,7 @@ async def create_application(body: ApplicationCreate, user: AuthenticatedUser = 
 
 
 @router.get("/{application_id}")
-async def get_application(application_id: str, user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
+def get_application(application_id: str, user: AuthenticatedUser = Depends(require_role(ANY_ROLE))):
     application = application_for(user, application_id)
     institution = db.fetch_one("institutions", id=application["institution_id"]) or {}
     documents = _documents_of([application_id])
@@ -110,7 +110,7 @@ async def get_application(application_id: str, user: AuthenticatedUser = Depends
 
 
 @router.post("/{application_id}/submit")
-async def submit_application(application_id: str, user: AuthenticatedUser = Depends(require_role(["institution"]))):
+def submit_application(application_id: str, user: AuthenticatedUser = Depends(require_role(["institution"]))):
     application = application_for(user, application_id)
     if application["workflow_status"] != "draft":
         raise HTTPException(status_code=409, detail="Only a draft application can be submitted")

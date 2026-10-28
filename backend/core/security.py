@@ -9,6 +9,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List
+import hashlib
+import threading
 import time
 import httpx
 import jwt
@@ -57,10 +59,25 @@ def _supabase_user(token: str):
             time.sleep(0.2 * (attempt + 1))
 
 
-async def get_current_user(
+# Verified tokens, kept briefly so each request does not pay two round trips to Supabase before its own
+# work. A signed-out token or a changed role therefore takes effect within AUTH_CACHE_SECONDS.
+AUTH_CACHE_SECONDS = 30
+_auth_cache: dict[str, tuple[float, AuthenticatedUser]] = {}
+_auth_lock = threading.Lock()
+
+
+def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme)
 ) -> AuthenticatedUser:
+    """A plain def, so FastAPI runs it in a worker thread and its network calls do not block other requests."""
     token = credentials.credentials
+    key = hashlib.sha256(token.encode()).hexdigest()
+    now = time.time()
+    with _auth_lock:
+        hit = _auth_cache.get(key)
+    if hit and hit[0] > now:
+        return hit[1]
+
     try:
         user = _supabase_user(token)
     except HTTPException:
@@ -75,14 +92,21 @@ async def get_current_user(
     if not member or member.get("role") not in ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has no ProofPath access")
 
-    return AuthenticatedUser(
+    claims = _unverified_claims(token)
+    verified = AuthenticatedUser(
         id=user.id,
         email=user.email,
         role=member["role"],
         institution_id=member.get("institution_id"),
         full_name=member.get("full_name") or user.email,
-        aal=_unverified_claims(token).get("aal") or "aal1",
+        aal=claims.get("aal") or "aal1",
     )
+    until = min(now + AUTH_CACHE_SECONDS, float(claims.get("exp") or now))
+    with _auth_lock:
+        for k in [k for k, (t, _) in _auth_cache.items() if t <= now]:
+            del _auth_cache[k]
+        _auth_cache[key] = (until, verified)
+    return verified
 
 
 def mfa_satisfied(user: AuthenticatedUser) -> bool:

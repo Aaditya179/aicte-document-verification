@@ -6,11 +6,13 @@ import { useParams } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
 import {
   PHOTO_CATEGORY_LABEL, humanize,
-  type ApplicationDetail, type DocumentRow, type ExtractedField, type FacultyRow, type Reference,
+  type ApplicationDetail, type DocumentRow, type ExtractedField, type FacultyRow, type Finding, type Priority,
+  type Reference, type StatusView, type ValidateResult,
 } from '@/lib/types';
 import { Checklist, FileCover } from '@/components/FileCover';
 import { FileCheckTag, ReadingTag, documentLink, isBeingRead } from '@/components/documents';
-import { Empty, Loading, Mark, Notice, Tag, btnQuiet, formatDate, formatDateTime, td, th } from '@/components/ui';
+import { AuditTrail, CitedPage, FindingCard, PriorityLedger, StatusCards, type Citation } from '@/components/findings';
+import { Empty, Loading, Mark, Notice, Tag, btnPrimary, btnQuiet, formatDate, formatDateTime, td, th, useMe } from '@/components/ui';
 
 type View = { url: string; mime: string; page: number | null };
 
@@ -114,6 +116,43 @@ function PhotoDetails({ doc }: { doc: DocumentRow }) {
   );
 }
 
+const CLOSED = new Set(['resolved', 'dismissed', 'auto_closed']);
+
+function FindingGroup({ title, id, findings, empty, onChange, ...card }: {
+  title: string;
+  id: string;
+  findings: Finding[];
+  empty: string;
+  docLabel: (t: string) => string;
+  onCite: (c: Citation) => void;
+  onChange: (f: Finding) => void;
+  canAct: boolean;
+}) {
+  const [showClosed, setShowClosed] = useState(false);
+  // A finding the reviewer just closed stays where it was, so they see their action recorded
+  const [justActed, setJustActed] = useState<Set<string>>(new Set());
+  const inPlace = (f: Finding) => !CLOSED.has(f.status) || justActed.has(f.id);
+  const open = findings.filter(inPlace);
+  const closed = findings.filter((f) => !inPlace(f));
+  const unresolved = findings.filter((f) => !CLOSED.has(f.status)).length;
+  const acted = (f: Finding) => { setJustActed((s) => new Set(s).add(f.id)); onChange(f); };
+  return (
+    <section aria-labelledby={id} className="space-y-3">
+      <h3 id={id} className="font-serif text-lg font-bold">
+        {title} <span className="font-sans text-base font-normal text-ink-2">({unresolved} unresolved)</span>
+      </h3>
+      {open.length === 0 && <p className="text-sm text-ink-2">{empty}</p>}
+      {open.map((f) => <FindingCard key={f.id} finding={f} onChange={acted} {...card} />)}
+      {closed.length > 0 && (
+        <button className={btnQuiet} onClick={() => setShowClosed((v) => !v)} aria-expanded={showClosed}>
+          {showClosed ? 'Hide' : 'Show'} {closed.length} closed finding{closed.length > 1 ? 's' : ''}
+        </button>
+      )}
+      {showClosed && closed.map((f) => <FindingCard key={f.id} finding={f} onChange={acted} {...card} />)}
+    </section>
+  );
+}
+
 function ReviewApplication() {
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
@@ -124,13 +163,54 @@ function ReviewApplication() {
   const [view, setView] = useState<View | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
   const [showOld, setShowOld] = useState(false);
+  const { me } = useMe();
+
+  const [findings, setFindings] = useState<Finding[] | null>(null);
+  const [statusView, setStatusView] = useState<StatusView | null>(null);
+  const [priority, setPriority] = useState<Priority | null>(null);
+  const [citation, setCitation] = useState<Citation | null>(null);
+  const [running, setRunning] = useState(false);
+  const [runNote, setRunNote] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const [version, setVersion] = useState(0);
   const load = () => setVersion((v) => v + 1);
+  // Bumped after validation or a reviewer action: statuses, priority, findings and the audit trail reload
+  const [review, setReview] = useState(0);
 
   useEffect(() => {
     fetchApi<ApplicationDetail>(`/applications/${id}`).then(({ data, error }) => (data ? setDetail(data) : setError(error)));
-  }, [id, version]);
+  }, [id, version, review]);
+
+  useEffect(() => {
+    fetchApi<Finding[]>(`/applications/${id}/findings`).then(({ data }) => setFindings(data ?? []));
+    fetchApi<StatusView>(`/applications/${id}/statuses`).then(({ data }) => data && setStatusView(data));
+    fetchApi<Priority>(`/applications/${id}/priority`).then(({ data }) => data && setPriority(data));
+  }, [id, review]);
+
+  const runValidation = async () => {
+    setRunning(true);
+    setRunNote(null);
+    const { data, error } = await fetchApi<ValidateResult>(`/applications/${id}/validate`, { method: 'POST' });
+    setRunning(false);
+    if (!data) return setRunNote({ kind: 'error', text: error ?? 'Validation could not run' });
+    const s = data.summary;
+    setRunNote({
+      kind: 'success',
+      text: `Validation finished: ${s.findings} finding${s.findings === 1 ? '' : 's'}, ${s.created} new, ${s.still_open} still open, ${s.auto_closed} closed because the condition no longer holds.`,
+    });
+    setReview((v) => v + 1);
+  };
+
+  const onChange = (f: Finding) => {
+    setFindings((all) => all?.map((x) => (x.id === f.id ? f : x)) ?? null);
+    setReview((v) => v + 1);
+  };
+
+  const cite = (c: Citation) => {
+    setCitation(c);
+    // On a narrow screen the viewer sits below the findings
+    if (window.matchMedia('(max-width: 1023px)').matches) document.getElementById('cited-page')?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
     fetchApi<Reference>('/reference').then(({ data }) => data && setTypes(Object.fromEntries(data.document_types.map((t) => [t.code, t.label]))));
@@ -161,6 +241,9 @@ function ReviewApplication() {
   if (error) return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><Notice kind="error">{error}</Notice></div>;
   if (!detail) return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><Loading what="Opening the application" /></div>;
 
+  const docLabel = (t: string) => types[t] ?? humanize(t);
+  const canAct = me?.role === 'reviewer';
+  const lastRun = statusView?.last_run ?? null;
   const documents = detail.documents.filter((d) => showOld || d.status === 'current');
   const superseded = detail.documents.length - detail.documents.filter((d) => d.status === 'current').length;
 
@@ -168,8 +251,68 @@ function ReviewApplication() {
     <div className="mx-auto w-full max-w-7xl space-y-10 px-4 py-8 sm:px-6">
       <div>
         <Link href="/review" className={btnQuiet}>Applications</Link>
-        <div className="mt-4"><FileCover detail={detail} /></div>
+        <div className="mt-4">
+          <FileCover detail={detail}>
+            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
+              {canAct && (
+                <button className={btnPrimary} onClick={runValidation} disabled={running || detail.application.workflow_status === 'draft'}>
+                  {running ? 'Running validation…' : lastRun ? 'Run validation again' : 'Run validation'}
+                </button>
+              )}
+              <p className="text-sm text-ink-2">
+                {detail.application.workflow_status === 'draft' ? 'The institution has not submitted this application yet.'
+                  : lastRun ? `Last run ${formatDateTime(lastRun.started_at)}, checked as of ${formatDate(lastRun.as_of_date)}.`
+                  : 'Validation has not run on this application yet.'}
+              </p>
+              {canAct && <Link href={`/review/${id}/casefile`} className={btnQuiet}>Case File</Link>}
+            </div>
+            {runNote && <div className="mt-3"><Notice kind={runNote.kind}>{runNote.text}</Notice></div>}
+          </FileCover>
+        </div>
       </div>
+
+      <section aria-labelledby="statuses" className="space-y-3">
+        <h2 id="statuses" className="font-serif text-xl font-bold">Where this application stands</h2>
+        <p className="text-sm text-ink-2">Four separate statuses. They are never added together, and none of them is the decision.</p>
+        {statusView ? <StatusCards statuses={statusView.statuses} /> : <Loading what="Loading statuses" />}
+      </section>
+
+      <section aria-labelledby="findings" className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_26rem]">
+        <div className="min-w-0 space-y-8">
+          <div>
+            <h2 id="findings" className="font-serif text-xl font-bold">Findings</h2>
+            <p className="mt-1 text-sm text-ink-2">Each finding says what differs and where. Choose a highlighted value to open its page.</p>
+          </div>
+          {!findings ? <Loading what="Loading findings" /> : !lastRun && findings.length === 0 ? (
+            <Empty>No findings yet. Run validation to check the documents against the rules and against each other.</Empty>
+          ) : (
+            <>
+              <FindingGroup id="within" title="Within this application" empty="Nothing unresolved within this application."
+                findings={findings.filter((f) => !f.is_cross_institution)} docLabel={docLabel} onCite={cite} onChange={onChange} canAct={canAct} />
+              <FindingGroup id="across" title="Across institutions" empty="No flags across institutions. These checks are not part of this build yet."
+                findings={findings.filter((f) => f.is_cross_institution)} docLabel={docLabel} onCite={cite} onChange={onChange} canAct={canAct} />
+            </>
+          )}
+        </div>
+        <aside className="space-y-8 lg:sticky lg:top-4 lg:self-start">
+          <div id="cited-page" className="scroll-mt-4">
+            <h3 className="mb-2 font-serif text-lg font-bold">Cited page</h3>
+            <CitedPage citation={citation} />
+          </div>
+          <div>
+            <h3 className="mb-2 font-serif text-lg font-bold">Review priority</h3>
+            {priority ? <PriorityLedger priority={priority} /> : <Loading what="Loading priority" />}
+          </div>
+          {lastRun?.rule_versions && (
+            <div>
+              <h3 className="mb-2 font-serif text-lg font-bold">Rules used in the last run</h3>
+              <ul className="flex flex-wrap gap-1.5">
+                {Object.entries(lastRun.rule_versions).sort(([a], [b]) => a.localeCompare(b)).map(([code, v]) => <li key={code}><Tag>{code} v{v}</Tag></li>)}
+              </ul>
+            </div>
+          )}
+        </aside>
+      </section>
 
       <Checklist detail={detail} />
 
@@ -257,6 +400,12 @@ function ReviewApplication() {
             </div>
           )}
         </div>
+      </section>
+
+      <section aria-labelledby="audit" className="space-y-3">
+        <h2 id="audit" className="font-serif text-xl font-bold">Audit trail</h2>
+        <p className="text-sm text-ink-2">Every step on this application, newest first. Each event is chained to the one before it by a hash, so a changed event shows up.</p>
+        <AuditTrail applicationId={id} version={review} />
       </section>
     </div>
   );

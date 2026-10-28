@@ -1,0 +1,173 @@
+{
+  "note": "Synthetic dataset. Every institution, person and document is fictional; rules are illustrative.",
+  "as_of": "2026-11-01",
+  "clean_control": "INST-1001-2026-27-01",
+  "applications": {
+    "INST-1001-2026-27-01": {
+      "scenario": "clean_control",
+      "note": "Every document consistent and in date; identifiers printed with different separators",
+      "expected": []
+    },
+    "INST-2001-2027-28-01": {
+      "scenario": "date_conflict",
+      "note": "Form declares approval valid until 31 March 2029; the certificate says 31/03/2028",
+      "expected": [
+        "DATE_CONFLICT|INST-2001-2027-28-01|CERT_VALIDITY"
+      ]
+    },
+    "INST-2002-2027-28-01": {
+      "scenario": "count_conflict",
+      "note": "Form declares 24 faculty; the faculty list totals 22",
+      "expected": [
+        "COUNT_CONFLICT|INST-2002-2027-28-01|FACULTY_COUNT"
+      ]
+    },
+    "INST-2003-2027-28-01": {
+      "scenario": "id_mismatch",
+      "note": "Institution code on the certificate differs from the form",
+      "expected": [
+        "ID_MISMATCH|INST-2003-2027-28-01|INST_CODE"
+      ]
+    },
+    "INST-2004-2027-28-01": {
+      "scenario": "missing_document",
+      "note": "No fire NOC uploaded",
+      "expected": [
+        "MISSING_DOCUMENT|INST-2004-2027-28-01|fire_noc"
+      ]
+    },
+    "INST-2005-2027-28-01": {
+      "scenario": "expired_document",
+      "note": "Approval certificate valid until 31/03/2026, before the as-of date 01/11/2026",
+      "expected": [
+        "EXPIRED_DOCUMENT|INST-2005-2027-28-01|approval_certificate"
+      ]
+    },
+    "INST-2006-2027-28-01": {
+      "scenario": "duplicate_file",
+      "note": "The library photo was also uploaded as the floor plan",
+      "expected": [
+        "DUPLICATE_FILE|INST-2006-2027-28-01|8d335492ad7523cb"
+      ]
+    },
+    "INST-2007-2027-28-01": {
+      "scenario": "low_confidence_date",
+      "note": "Certificate date of issue printed 03/08/2025: 3 August or 8 March",
+      "expected": [
+        "FIELD_NEEDS_CONFIRMATION|INST-2007-2027-28-01|approval_certificate.issue_date"
+      ]
+    },
+    "INST-2008-2027-28-01": {
+      "scenario": "date_order",
+      "note": "Fire NOC valid until a date before its date of issue",
+      "expected": [
+        "DATE_ORDER_INVALID|INST-2008-2027-28-01|fire_noc"
+      ]
+    },
+    "INST-2009-2027-28-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2010-2027-28-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2011-2027-28-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2012-2027-28-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2013-2027-28-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2014-2027-28-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2015-2027-28-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2001-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2002-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2003-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2004-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2005-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2006-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2007-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2008-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2009-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2010-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2011-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2012-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    },
+    "INST-2013-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents (new institution, with land document)",
+      "expected": []
+    },
+    "INST-2014-2026-27-01": {
+      "scenario": "clean",
+      "note": "Consistent documents",
+      "expected": []
+    }
+  }
+}

@@ -73,7 +73,7 @@ def _check_lock(email: str) -> None:
 
 
 @router.post("/login", dependencies=[Depends(rate_limit("20/minute", "login"))])
-async def login(req: LoginRequest):
+def login(req: LoginRequest):
     email = req.email.lower()
     _check_lock(email)
     resp = _gotrue("token?grant_type=password", {"email": email, "password": req.password})
@@ -87,7 +87,7 @@ async def login(req: LoginRequest):
 
 
 @router.post("/otp", dependencies=[Depends(rate_limit("5/minute", "otp"))])
-async def request_otp(req: OtpRequest):
+def request_otp(req: OtpRequest):
     """Email a one-time code to an existing account. The reply never says whether the account exists."""
     email = req.email.lower()
     _check_lock(email)
@@ -98,7 +98,7 @@ async def request_otp(req: OtpRequest):
 
 
 @router.post("/otp/verify", dependencies=[Depends(rate_limit("10/minute", "otp-verify"))])
-async def verify_otp(req: OtpVerify):
+def verify_otp(req: OtpVerify):
     email = req.email.lower()
     _check_lock(email)
     resp = _gotrue("verify", {"type": "email", "email": email, "token": req.token})
@@ -110,7 +110,7 @@ async def verify_otp(req: OtpVerify):
 
 
 @router.get("/mfa-status")
-async def mfa_status(user: AuthenticatedUser = Depends(get_current_user)):
+def mfa_status(user: AuthenticatedUser = Depends(get_current_user)):
     """Whether this session still needs a TOTP step before reviewer and rule admin routes accept it."""
     return {
         "role": user.role,

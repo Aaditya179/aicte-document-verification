@@ -162,3 +162,147 @@ export function humanize(code: string) {
   const s = code.replace(/_/g, ' ');
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+// Findings, statuses and priority (phase 2)
+
+export type FindingStatus = 'open' | 'evidence_requested' | 'resolved' | 'dismissed' | 'auto_closed';
+export type ReviewActionKind = 'resolve' | 'dismiss' | 'request_evidence';
+
+export interface FindingEvidence {
+  id: string;
+  document_id: string | null;
+  page_number: number | null;
+  role: 'A' | 'B' | 'SINGLE' | null;
+  label: string | null;
+  shown_value: string | null;
+  document: { doc_type: string; original_name: string | null; version: number; status: string; mime: string } | null;
+}
+
+export interface ReviewAction {
+  id: string;
+  action: ReviewActionKind | 'confirm_field' | 'correct_field';
+  action_label: string;
+  reason: string;
+  actor_name: string | null;
+  actor_role: string | null;
+  created_at: string;
+}
+
+export interface EvidenceRequest {
+  id: string;
+  message: string | null;
+  due_date: string | null;
+  status: 'open' | 'fulfilled' | 'cancelled';
+  created_at: string;
+}
+
+export interface Finding {
+  id: string;
+  finding_key: string;
+  application_id: string;
+  related_application_id: string | null;
+  finding_type: string;
+  rule_code: string | null;
+  rule_version: number | null;
+  severity: 'info' | 'low' | 'medium' | 'high' | null;
+  title: string;
+  detail: string;
+  status: FindingStatus;
+  is_cross_institution: boolean;
+  created_at: string;
+  evidence: FindingEvidence[];
+  actions: ReviewAction[];
+  evidence_requests: EvidenceRequest[];
+}
+
+export interface StatusCard {
+  key: 'integrity' | 'consistency' | 'authenticity' | 'compliance';
+  label: string;
+  value: string;
+  tone: 'ok' | 'conflict' | 'pending' | 'neutral';
+  reasons: string[];
+}
+
+export interface LatestRun {
+  id: string;
+  started_at: string;
+  as_of_date: string;
+  rule_versions?: Record<string, number>;
+  summary: { findings: number; created: number; reopened: number; still_open: number; auto_closed: number } | null;
+}
+
+export interface StatusView {
+  statuses: StatusCard[];
+  administrative: string;
+  last_run: LatestRun | null;
+}
+
+export interface PriorityTerm {
+  key: string;
+  label: string;
+  weight: number;
+  count: number;
+  contribution: number;
+}
+
+export interface Priority {
+  score: number;
+  band: 'High' | 'Medium' | 'Low';
+  raw: number;
+  capped: boolean;
+  unresolved: number;
+  days_to_deadline: number | null;
+  composition: PriorityTerm[];
+}
+
+export interface ValidateResult {
+  run_id: string;
+  as_of_date: string;
+  rule_versions: Record<string, number>;
+  summary: NonNullable<LatestRun['summary']>;
+  statuses: StatusView;
+  priority: Priority;
+}
+
+export interface AuditEvent {
+  id: number;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_role: string | null;
+  event_type: string;
+  entity_type: string | null;
+  application_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+  event_hash: string;
+}
+
+export interface CaseFile {
+  application: Pick<Application, 'id' | 'code' | 'category' | 'academic_year' | 'workflow_status' | 'submitted_at' | 'review_deadline' | 'declared_total_area_sqm'>;
+  institution: InstitutionRef;
+  statuses: StatusView;
+  priority: Priority;
+  findings: Finding[];
+  documents: {
+    id: string; doc_type: string; label: string; original_name: string | null; version: number; status: string;
+    sha256: string | null; integrity_status: string; integrity_note: string | null; uploaded_at: string;
+    verification: { method: string; status: string; source: string | null; is_mock: boolean; checked_at: string }[];
+  }[];
+  reviewer_actions: (ReviewAction & { finding_title: string; finding_key: string })[];
+  latest_run: LatestRun | null;
+  rule_versions: { rule_code: string; version: number; title: string | null; note: string | null }[];
+  final_decision: string;
+  disclaimers: string[];
+}
+
+export const FINDING_STATUS_LABEL: Record<FindingStatus, string> = {
+  open: 'Open',
+  evidence_requested: 'Evidence requested',
+  resolved: 'Resolved',
+  dismissed: 'Dismissed',
+  auto_closed: 'Closed by a later run',
+};
+
+export const SEVERITY_LABEL: Record<string, string> = {
+  info: 'Information', low: 'Low', medium: 'Medium', high: 'High',
+};

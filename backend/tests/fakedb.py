@@ -3,8 +3,16 @@ An in-memory stand-in for the PostgREST query builder, covering the calls the AP
 select / insert / update / delete / upsert with eq, neq, in_, order, limit and range.
 Routes run unchanged against it, so access rules are tested through the real endpoints.
 """
+import itertools
 import uuid
 from types import SimpleNamespace
+
+# Like Postgres `default now()`: increasing, so ordering by created_at follows insertion order
+_clock = itertools.count(1)
+
+
+def _now() -> str:
+    return f"2026-10-28T10:00:00.{next(_clock):06d}+00:00"
 
 
 class FakeQuery:
@@ -68,7 +76,7 @@ class FakeQuery:
     def execute(self):
         if self.op == "insert":
             many = isinstance(self.payload, list)
-            new = [{"id": str(uuid.uuid4()), **row} for row in (self.payload if many else [self.payload])]
+            new = [{"id": str(uuid.uuid4()), "created_at": _now(), **row} for row in (self.payload if many else [self.payload])]
             self.rows.extend(new)
             return SimpleNamespace(data=[dict(r) for r in new], count=None)
         if self.op == "upsert":

@@ -117,8 +117,9 @@ def _supersede(document: dict) -> dict:
     return {"version": previous["version"] + 1, "supersedes_id": previous["id"]}
 
 
-def finalize(user: AuthenticatedUser, document: dict) -> tuple[dict, bool]:
-    """Run the file check. Returns the updated document and whether it should be read next."""
+def finalize(user: Optional[AuthenticatedUser], document: dict) -> tuple[dict, bool]:
+    """Run the file check. Returns the updated document and whether it should be read next.
+    `user` is None for the seed script, which uploads as the system."""
     if document["integrity_status"] != "pending":
         return document, False
     try:
@@ -139,7 +140,7 @@ def finalize(user: AuthenticatedUser, document: dict) -> tuple[dict, bool]:
     updated = db.update("documents", document["id"], updates) or {**document, **updates}
     db.insert("verification_checks", {
         "document_id": document["id"], "method": "HASH", "source": "internal", "status": status,
-        "response": {"sha256": sha256, "note": note}, "checked_by": user.id,
+        "response": {"sha256": sha256, "note": note}, "checked_by": user.id if user else None,
     })
     audit.record(user, "document_finalized", "document", document["id"], document["application_id"],
                  {"sha256": sha256, "integrity": status, "note": note, "pages": pages,

@@ -55,8 +55,14 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cp .env.example .env                           # Same SUPABASE_* values as Nirikshan
 PYTHONPATH=. .venv/bin/python -m seed.demo     # Demo accounts, 2 institutions, 2 draft applications
 PYTHONPATH=. .venv/bin/python -m seed.samples  # Synthetic files to upload, in seed/samples/
+PYTHONPATH=. .venv/bin/python -m seed.seed     # 30 applications from 16 fictional institutions (spec 14)
 PYTHONPATH=. .venv/bin/uvicorn main:app --reload --port 8001
 ```
+
+`seed.seed` writes `seed/ground_truth.json`, the findings each application must produce, and sets the
+as-of date to 01/11/2026. `--reset` lists what it would delete and deletes it only with `--yes`. With
+the API running, `python -m scripts.evaluate` validates every seeded application through the API and
+reports precision, recall and F1 against the ground truth (measured on synthetic data only).
 
 API docs: http://localhost:8001/docs. Scanned pages are read only with Tesseract installed
 (`brew install tesseract`) and `OCR_ENABLED=true`; without it their values go to a reviewer to confirm.
@@ -97,10 +103,12 @@ proofpath-ai/
 │   └── lib/                 API client, upload flow, Supabase client, types
 ├── backend/                 FastAPI
 │   ├── core/                settings, schema-bound database, roles, access rules, as-of date, rate limits
-│   ├── routers/             auth, applications, documents, reference
-│   ├── services/            pipeline, extraction, normalise, audit, llm (Groq)
+│   ├── routers/             auth, applications, documents, findings, reference
+│   ├── services/            pipeline, extraction, normalise, validation, statuses, priority,
+│   │                        reviews, casefile, audit, llm (Groq)
+│   ├── scripts/             evaluate (ground-truth scoring)
 │   ├── schemas/             request bodies
-│   ├── seed/                demo accounts, sample files
+│   ├── seed/                demo accounts, sample files, the 30-application dataset
 │   └── tests/
 ├── supabase/migrations/     0001 schema, 0002 lockdown, 0003 reference data
 ├── design/                  the design tokens

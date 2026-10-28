@@ -44,7 +44,7 @@ export default function Navbar() {
   const links = me ? NAV_LINKS[me.role] : [];
 
   return (
-    <header className="ledger-rule bg-paper">
+    <header className="ledger-rule bg-paper print:hidden">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3 sm:px-6">
         <Brand href={me ? HOME[me.role] : '/welcome'} />
         <nav aria-label="Main" className="flex flex-1 items-center gap-5">

@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
 from core.security import AuthenticatedUser, MFA_ROLES, get_current_user, mfa_satisfied
-from routers import applications, auth, documents, reference
+from routers import applications, auth, documents, findings, reference
 
+# Route handlers are plain `def`: supabase-py is blocking, and FastAPI runs a plain handler in a worker
+# thread, so one request's database calls do not hold up the others.
 app = FastAPI(
     title="ProofPath AI API",
     description="Evidence-first validation of AICTE applications (SIH26261). Decision support only.",
@@ -22,22 +24,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (auth, applications, documents, reference):
+for module in (auth, applications, documents, findings, reference):
     app.include_router(module.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Health"])
-async def health_check():
+def health_check():
     return {"status": "healthy", "service": "proofpath-api", "version": app.version}
 
 
 @app.get("/api/v1/health", tags=["Health"])
-async def api_health_check():
+def api_health_check():
     return {"status": "healthy", "service": "proofpath-api-v1"}
 
 
 @app.get("/api/v1/me", tags=["Auth"])
-async def get_me(user: AuthenticatedUser = Depends(get_current_user)):
+def get_me(user: AuthenticatedUser = Depends(get_current_user)):
     return {
         "user_id": user.id,
         "email": user.email,

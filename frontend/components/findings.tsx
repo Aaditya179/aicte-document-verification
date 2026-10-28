@@ -1,0 +1,352 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { fetchApi } from '@/lib/api';
+import {
+  FINDING_STATUS_LABEL, SEVERITY_LABEL, humanize,
+  type AuditEvent, type Finding, type FindingEvidence, type Priority, type ReviewActionKind, type StatusCard,
+} from '@/lib/types';
+import { documentLink } from './documents';
+import { Empty, Loading, Mark, Notice, Tag, btnQuiet, btnSecondary, formatDate, formatDateTime, input, label, sheet, td, th } from './ui';
+
+// Green ink is kept for what a person did, so a passed status is written in plain ink
+const STATUS_TONE = {
+  ok: { bar: 'border-t-ink', text: 'text-ink' },
+  conflict: { bar: 'border-t-conflict', text: 'text-conflict' },
+  pending: { bar: 'border-t-pending', text: 'text-pending' },
+  neutral: { bar: 'border-t-rule-strong', text: 'text-ink-3' },
+} as const;
+
+/** The four statuses, side by side and never added together (build spec 7.3). */
+export function StatusCards({ statuses }: { statuses: StatusCard[] }) {
+  return (
+    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {statuses.map((s) => (
+        <li key={s.key} className={`${sheet} border-t-[3px] p-4 ${STATUS_TONE[s.tone].bar}`}>
+          <p className="text-sm text-ink-2">{s.label}</p>
+          <p className={`mt-1 font-serif text-lg font-bold leading-snug ${STATUS_TONE[s.tone].text}`}>{s.value}</p>
+          {s.reasons.length > 0 && (
+            <ul className="mt-2 space-y-1 text-sm text-ink-2">
+              {s.reasons.slice(0, 4).map((r, i) => <li key={i}>{r}</li>)}
+              {s.reasons.length > 4 && <li>and {s.reasons.length - 4} more</li>}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The priority score worked out as a sum, so the reviewer sees how it was reached (build spec 7.4). */
+export function PriorityLedger({ priority }: { priority: Priority }) {
+  return (
+    <div className={`${sheet} p-4`}>
+      {priority.composition.length === 0 ? (
+        <p className="text-sm text-ink-2">No unresolved findings, so nothing adds to the score.</p>
+      ) : (
+        <table className="w-full border-collapse text-sm">
+          <caption className="sr-only">How the priority score is reached</caption>
+          <tbody>
+            {priority.composition.map((t) => (
+              <tr key={t.key} className="border-b border-rule">
+                <td className="py-1.5 pr-3">{t.label}</td>
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right tabular-nums text-ink-2">{t.count} × {t.weight}</td>
+                <td className="w-12 py-1.5 text-right font-semibold tabular-nums">{t.contribution}</td>
+              </tr>
+            ))}
+            {priority.capped && (
+              <tr className="border-b border-rule">
+                <td className="py-1.5 pr-3 text-ink-2" colSpan={2}>Capped at 100 (sum {priority.raw})</td>
+                <td className="py-1.5 text-right tabular-nums text-ink-2">{100 - priority.raw}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+      <div className="ledger-rule" aria-hidden />
+      <p className="mt-2 flex items-baseline justify-between gap-3">
+        <span className="font-semibold">Priority {priority.band.toLowerCase()}</span>
+        <span className="font-serif text-2xl font-bold tabular-nums">{priority.score}<span className="text-sm font-normal text-ink-2"> of 100</span></span>
+      </p>
+      <p className="mt-1 text-xs text-ink-2">Priority only orders the review queue. It never changes a status.</p>
+    </div>
+  );
+}
+
+export type Citation = { documentId: string; page: number | null; label: string };
+
+/** The cited document, opened at the cited page. Links expire, so each citation asks for a fresh one. */
+export function CitedPage({ citation }: { citation: Citation | null }) {
+  const [view, setView] = useState<{ url: string; mime: string; key: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const key = citation ? `${citation.documentId}#${citation.page}` : '';
+
+  useEffect(() => {
+    if (!citation) return;
+    let live = true;
+    documentLink(citation.documentId).then(({ url, mime, error }) => {
+      if (!live) return;
+      if (url) { setView({ url, mime: mime ?? 'application/pdf', key }); setError(null); }
+      else setError(error);
+    });
+    return () => { live = false; };
+  }, [citation, key]);
+
+  if (!citation) return <Empty>Choose a highlighted value to open the page it was read from.</Empty>;
+  if (error) return <Notice kind="error">{error}</Notice>;
+  if (!view || view.key !== key) return <Loading what="Opening the document" />;
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+        <p><span className="font-semibold">{citation.label}</span>{citation.page && <span className="text-ink-2">, page {citation.page}</span>}</p>
+        <a href={view.url} target="_blank" rel="noreferrer" className={btnQuiet}>Open in a new tab</a>
+      </div>
+      <div className="overflow-hidden rounded-sheet border border-rule-strong bg-sheet">
+        {view.mime === 'application/pdf' ? (
+          <iframe key={key} src={`${view.url}#page=${citation.page ?? 1}`} title={`${citation.label}, page ${citation.page ?? 1}`} className="h-[34rem] w-full" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={view.url} alt={citation.label} className="max-h-[34rem] w-full object-contain" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceCell({ ev, docLabel, onCite }: { ev: FindingEvidence; docLabel: (t: string) => string; onCite: (c: Citation) => void }) {
+  const name = ev.document ? docLabel(ev.document.doc_type) : null;
+  const cite = ev.document_id ? () => onCite({ documentId: ev.document_id!, page: ev.page_number, label: name ?? 'Document' }) : undefined;
+  return (
+    <div className="min-w-0">
+      <p className="text-sm text-ink-2">{ev.label}</p>
+      <p className="mt-0.5">
+        {ev.shown_value
+          ? <Mark onClick={cite} title={cite ? `Open ${name ?? 'the document'}${ev.page_number ? `, page ${ev.page_number}` : ''}` : undefined}>{ev.shown_value}</Mark>
+          : <span className="text-ink-3">No value</span>}
+      </p>
+      {ev.document && (
+        <p className="mt-1 text-xs text-ink-2">
+          {name}{ev.page_number ? `, page ${ev.page_number}` : ''}{ev.document.status === 'superseded' ? ', replaced since' : ''}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Two values that should agree are set side by side; a single piece of evidence stands alone. */
+function Evidence({ evidence, docLabel, onCite }: { evidence: FindingEvidence[]; docLabel: (t: string) => string; onCite: (c: Citation) => void }) {
+  const a = evidence.find((e) => e.role === 'A');
+  const b = evidence.find((e) => e.role === 'B');
+  const singles = evidence.filter((e) => e.role !== 'A' && e.role !== 'B');
+  return (
+    <div className="space-y-3">
+      {a && b && (
+        <div className="grid items-start gap-3 rounded-sheet border border-rule bg-paper p-3 sm:grid-cols-[1fr_auto_1fr]">
+          <EvidenceCell ev={a} docLabel={docLabel} onCite={onCite} />
+          <p className="self-center text-center text-sm font-semibold text-conflict">differs from</p>
+          <EvidenceCell ev={b} docLabel={docLabel} onCite={onCite} />
+        </div>
+      )}
+      {singles.length > 0 && (
+        <div className="grid gap-3 rounded-sheet border border-rule bg-paper p-3 sm:grid-cols-2">
+          {singles.map((e) => <EvidenceCell key={e.id} ev={e} docLabel={docLabel} onCite={onCite} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ACTIONS: { kind: ReviewActionKind; button: string; submit: string; hint: string }[] = [
+  { kind: 'resolve', button: 'Resolve', submit: 'Record as resolved', hint: 'Say what settles it, for example which document you checked.' },
+  { kind: 'dismiss', button: 'Dismiss', submit: 'Record as dismissed', hint: 'Say why this finding does not need action.' },
+  { kind: 'request_evidence', button: 'Ask for evidence', submit: 'Send the request', hint: 'The institution sees this message and the due date.' },
+];
+
+function ActionForm({ finding, onDone }: { finding: Finding; onDone: (f: Finding) => void }) {
+  const [kind, setKind] = useState<ReviewActionKind | null>(null);
+  const [reason, setReason] = useState('');
+  const [due, setDue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const chosen = ACTIONS.find((a) => a.kind === kind);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!kind) return;
+    setBusy(true);
+    setError(null);
+    const { data, error } = await fetchApi<Finding>(`/findings/${finding.id}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action: kind, reason: reason.trim(), ...(kind === 'request_evidence' && due ? { due_date: due } : {}) }),
+    });
+    setBusy(false);
+    if (data) { setKind(null); setReason(''); setDue(''); onDone(data); }
+    else setError(error);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Actions on this finding">
+        {ACTIONS.map((a) => {
+          const blocked = a.kind === 'request_evidence' && (finding.is_cross_institution || finding.status === 'evidence_requested');
+          return (
+            <button key={a.kind} type="button" disabled={blocked} aria-pressed={kind === a.kind}
+              title={blocked ? (finding.is_cross_institution ? 'The institution is never told about another institution\'s records' : 'Evidence has already been requested') : undefined}
+              onClick={() => { setKind(kind === a.kind ? null : a.kind); setError(null); }}
+              className={`${btnSecondary} px-3 py-1.5 ${kind === a.kind ? 'border-officer bg-officer-wash text-officer' : ''}`}>
+              {a.button}
+            </button>
+          );
+        })}
+      </div>
+      {chosen && (
+        <form onSubmit={submit} className="space-y-3 border-l-2 border-officer pl-4">
+          <div>
+            <label htmlFor={`reason-${finding.id}`} className={label}>Reason</label>
+            <textarea id={`reason-${finding.id}`} required minLength={3} rows={3} value={reason}
+              onChange={(e) => setReason(e.target.value)} className={input} aria-describedby={`hint-${finding.id}`} />
+            <p id={`hint-${finding.id}`} className="mt-1 text-xs text-ink-2">{chosen.hint} A reason is required and goes into the audit trail.</p>
+          </div>
+          {kind === 'request_evidence' && (
+            <div className="max-w-56">
+              <label htmlFor={`due-${finding.id}`} className={label}>Due date (optional)</label>
+              <input id={`due-${finding.id}`} type="date" value={due} onChange={(e) => setDue(e.target.value)} className={input} />
+              <p className="mt-1 text-xs text-ink-2">Left empty, it is 7 days from the as-of date.</p>
+            </div>
+          )}
+          {error && <Notice kind="error">{error}</Notice>}
+          <button type="submit" disabled={busy || reason.trim().length < 3}
+            className="inline-flex items-center rounded-control bg-officer px-4 py-2 text-sm font-semibold text-sheet hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+            {busy ? 'Recording…' : chosen.submit}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/** What reviewers did on a finding, in green ink. */
+function ActionHistory({ finding }: { finding: Finding }) {
+  if (finding.actions.length === 0 && finding.evidence_requests.length === 0) return null;
+  return (
+    <ol className="space-y-2 border-l-2 border-officer pl-4 text-sm">
+      {finding.actions.map((a) => (
+        <li key={a.id} className="text-officer">
+          <span className="font-semibold">{a.action_label}</span>
+          <span> by {a.actor_name ?? 'a reviewer'}, {formatDateTime(a.created_at)}</span>
+          <p className="text-ink">{a.reason}</p>
+        </li>
+      ))}
+      {finding.evidence_requests.filter((r) => r.status === 'open').map((r) => (
+        <li key={r.id} className="text-pending">Evidence due {formatDate(r.due_date)}</li>
+      ))}
+    </ol>
+  );
+}
+
+const STATUS_TAG = {
+  open: 'conflict', evidence_requested: 'pending', resolved: 'ok', dismissed: 'ok', auto_closed: 'neutral',
+} as const;
+
+export function FindingCard({ finding, docLabel, onCite, onChange, canAct }: {
+  finding: Finding;
+  docLabel: (t: string) => string;
+  onCite: (c: Citation) => void;
+  onChange: (f: Finding) => void;
+  canAct: boolean;
+}) {
+  const unresolved = finding.status === 'open' || finding.status === 'evidence_requested';
+  return (
+    <article className={`${sheet} space-y-4 p-4 ${finding.status === 'open' ? 'border-l-4 border-l-conflict' : ''}`} aria-labelledby={`f-${finding.id}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h4 id={`f-${finding.id}`} className="font-serif text-base font-bold leading-snug">{finding.title}</h4>
+        <Tag tone={STATUS_TAG[finding.status]}>{FINDING_STATUS_LABEL[finding.status]}</Tag>
+      </div>
+      <p className="-mt-2 text-xs text-ink-2">
+        {humanize(finding.finding_type.toLowerCase())}, rule {finding.rule_code} version {finding.rule_version ?? '—'}
+        {finding.severity && `, ${SEVERITY_LABEL[finding.severity].toLowerCase()} severity`}
+      </p>
+      <p className="text-sm">{finding.detail}</p>
+      {finding.evidence.length > 0 && <Evidence evidence={finding.evidence} docLabel={docLabel} onCite={onCite} />}
+      <ActionHistory finding={finding} />
+      {canAct && unresolved && <ActionForm finding={finding} onDone={onChange} />}
+    </article>
+  );
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  application_created: 'Application created',
+  application_seeded: 'Application loaded with demo data',
+  application_submitted: 'Application submitted',
+  document_upload_started: 'Upload started',
+  document_finalized: 'Document received',
+  document_processed: 'Document read',
+  document_processing_failed: 'Document could not be read',
+  validation_run: 'Validation run',
+  finding_resolve: 'Finding resolved',
+  finding_dismiss: 'Finding dismissed',
+  finding_request_evidence: 'Evidence requested',
+  case_file_snapshot: 'Case File snapshot saved',
+};
+
+function eventNote(e: AuditEvent): string {
+  const d = e.detail ?? {};
+  if (e.event_type === 'validation_run') {
+    return `${d.findings ?? 0} findings: ${d.created ?? 0} new, ${d.still_open ?? 0} still open, ${d.auto_closed ?? 0} closed. As of ${formatDate(String(d.as_of_date ?? ''))}.`;
+  }
+  if (typeof d.reason === 'string') return d.reason;
+  if (typeof d.original_name === 'string') return d.original_name;
+  return '';
+}
+
+/** The application's audit trail, newest first, with a check that no event was changed afterwards. */
+export function AuditTrail({ applicationId, version }: { applicationId: string; version: number }) {
+  const [events, setEvents] = useState<AuditEvent[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [chain, setChain] = useState<{ ok: boolean; events_checked: number; broken_at_id: number | null } | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    fetchApi<AuditEvent[]>(`/audit?application_id=${applicationId}&limit=200`)
+      .then(({ data, error }) => (data ? setEvents(data) : setError(error)));
+  }, [applicationId, version]);
+
+  const verify = async () => {
+    setChecking(true);
+    const { data, error } = await fetchApi<{ ok: boolean; events_checked: number; broken_at_id: number | null }>('/audit/verify');
+    setChecking(false);
+    if (data) setChain(data);
+    else setError(error);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <button className={btnSecondary} onClick={verify} disabled={checking}>{checking ? 'Checking…' : 'Check the audit chain'}</button>
+        {chain && (chain.ok
+          ? <p className="text-sm" role="status">Chain intact: all {chain.events_checked} events still match their hashes.</p>
+          : <p className="text-sm font-semibold text-conflict" role="alert">Chain broken at event {chain.broken_at_id}: it no longer matches its hash.</p>)}
+      </div>
+      {error && <Notice kind="error">{error}</Notice>}
+      {!events ? <Loading what="Loading the audit trail" /> : events.length === 0 ? <Empty>No events yet.</Empty> : (
+        <div className="max-h-[28rem] overflow-auto">
+          <table className="w-full min-w-[40rem] border-collapse">
+            <thead className="sticky top-0 bg-paper">
+              <tr><th className={th}>When</th><th className={th}>Event</th><th className={th}>By</th><th className={th}>Detail</th></tr>
+            </thead>
+            <tbody>
+              {events.map((e) => (
+                <tr key={e.id}>
+                  <td className={`${td} whitespace-nowrap`}>{formatDateTime(e.created_at)}</td>
+                  <td className={td}>{EVENT_LABEL[e.event_type] ?? humanize(e.event_type)}</td>
+                  <td className={td}>{e.actor_name ?? '—'}</td>
+                  <td className={`${td} text-ink-2`}>{eventNote(e)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
