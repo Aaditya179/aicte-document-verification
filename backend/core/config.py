@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     DEMO_PASSWORD: str = "password123"
     PORT: int = 8001
 
-    # Verifier and analyst routes need an aal2 token. DEMO_MFA_BYPASS lets demo accounts skip it,
+    # Reviewer and rule admin routes need an aal2 token. DEMO_MFA_BYPASS lets demo accounts skip it,
     # except the accounts in DEMO_MFA_ENFORCED_EMAILS, which show the full flow. Off in any real deployment.
     DEMO_MFA_BYPASS: bool = False
     DEMO_MFA_ENFORCED_EMAILS: str = ""

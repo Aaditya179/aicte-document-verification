@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL } from '@/lib/api';
 
 type State = 'checking' | 'waking' | 'ready' | 'down';
@@ -42,20 +41,20 @@ export default function ServerWakeNote({ className = '' }: { className?: string 
 
   if (state === 'ready') {
     return (
-      <p className={`flex items-center gap-1.5 text-xs text-emerald-700 ${className}`} role="status">
-        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Server is awake, pages will load normally.
+      <p className={`text-sm text-officer ${className}`} role="status">
+        The server is awake, so pages will load normally.
       </p>
     );
   }
 
   return (
-    <div className={`rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 ${className}`} role="status" aria-live="polite">
-      <p className="flex items-center gap-1.5 font-semibold">
+    <div className={`rounded-sheet border-l-4 border border-pending bg-pending-wash px-4 py-3 text-sm text-pending ${className}`} role="status" aria-live="polite">
+      <p className="font-semibold">
         {state === 'down'
-          ? <><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /> The server is taking longer than usual. Please refresh in a minute.</>
-          : <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> {state === 'waking' ? 'Waking up the server, this can take up to a minute…' : 'Checking the server…'}</>}
+          ? 'The server is taking longer than usual. Refresh in a minute.'
+          : state === 'waking' ? 'Waking up the server. This can take up to a minute…' : 'Checking the server…'}
       </p>
-      <p className="mt-1 text-amber-800">
+      <p className="mt-1">
         The first load may be slow: this demo runs on a free hosting plan that puts the server to sleep after
         15 minutes without visitors, and the first request starts it again. After that, pages load normally.
       </p>

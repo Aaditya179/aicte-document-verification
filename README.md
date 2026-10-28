@@ -1,44 +1,37 @@
 # ProofPath AI
 
-**Traceable case files for AICTE applications** · Smart India Hackathon · Problem statement **SIH26261**
+**Evidence-first review of AICTE applications** · Smart India Hackathon · Problem statement **SIH26261**
 
-ProofPath AI turns the documents of an AICTE application into one traceable case file that shows what is verified, what conflicts, what is unverified and why. It also catches patterns across institutions that checking one application at a time cannot see.
+ProofPath AI reads every document in an AICTE application, checks the values against versioned
+(illustrative) rules and against each other, compares them across institutions, and gives the
+reviewer a case file in which every finding points to the document and page it came from.
 
-> Advisory only: final decisions rest with the competent authority.
+> Decision support only. The final decision always reads "Pending (authorised AICTE official)" and
+> nothing in ProofPath can change it. All institutions, people, documents and photos are fictional;
+> all rules are illustrative, not official AICTE rules.
 
-> **Being rebuilt to the build spec.** The product is built phase by phase from [`ProofPath AI Build Spec for Claude Code.md`](ProofPath%20AI%20Build%20Spec%20for%20Claude%20Code.md). Every deviation from it, mostly to keep the shared Supabase project safe for Nirikshan, is recorded in [`ASSUMPTIONS.md`](ASSUMPTIONS.md). Phase 0 (setup) is done. The data model, roles and setup steps below describe the earlier version and change in phase 1.
+The product is built phase by phase from
+[`ProofPath AI Build Spec for Claude Code.md`](ProofPath%20AI%20Build%20Spec%20for%20Claude%20Code.md).
+Every deviation from the spec, mostly to keep the shared Supabase project safe for Nirikshan, is in
+[`ASSUMPTIONS.md`](ASSUMPTIONS.md). **Done so far:** phase 0 (setup) and phase 1 (foundation: schema,
+roles, upload and reading pipeline, document viewer, welcome and sign-in).
 
 ---
 
 ## Relationship to Nirikshan
 
-ProofPath is a sister project of [Nirikshan](../aicte-workflow) (SIH26262). It uses the same Supabase project and the same interface (palette, fonts and components), and keeps its data apart:
+ProofPath is a sister project of Nirikshan (SIH26262). It uses the same Supabase project and keeps its
+data apart:
 
 | Shared | Kept apart |
 | :--- | :--- |
 | The Supabase project (URL and keys) | Tables: everything ProofPath owns is in the `proofpath` schema; Nirikshan's are in `public` |
-| Sign-in accounts (`auth.users`) | Roles: ProofPath reads roles only from `proofpath.members`. A Nirikshan account has no ProofPath access unless it is added there, and ProofPath accounts set no Nirikshan role |
-| The look: palette, fonts, `components/ui.tsx`, the MFA step | Files: the private `proofpath-documents` bucket, separate from Nirikshan's `documents` |
+| Sign-in accounts (`auth.users`) | Roles: ProofPath reads roles only from `proofpath.members`, never from `app_metadata` (Nirikshan's role) |
+| | Files: the private `proofpath-documents` bucket, separate from Nirikshan's `documents` |
 | | Ports: API on 8001 and web on 3001, so both apps run side by side |
 
-The browser never queries the `proofpath` schema directly. Only the API's service role has access to it, and row-level security is on with no policies as a second lock.
-
----
-
-## Data model
-
-| Table | Holds |
-| :--- | :--- |
-| `institutions` | Institutions, by AICTE ID |
-| `members` | Which shared accounts can use ProofPath, and their role: institution, verifier, analyst, auditor or admin |
-| `cases` | One case file per application |
-| `documents` | Each uploaded document, with its SHA-256 hash |
-| `facts` | Each value read from a document, with the page, the line it came from and the read confidence |
-| `checks` | The verdict on each field of a case (verified, conflict or unverified) and the reason, linked to the facts it rests on |
-| `patterns` | Findings across institutions, such as the same land parcel declared by two applications |
-| `audit_log` | Append-only, SHA-256 hash-chained audit trail |
-
-The schema is in [`supabase/migrations/0001_proofpath_schema.sql`](supabase/migrations/0001_proofpath_schema.sql).
+The browser never queries the `proofpath` schema. Only the API's service role can reach it; row-level
+security is on with no policies and browser roles have no grants. The API enforces each role's access.
 
 ---
 
@@ -46,22 +39,30 @@ The schema is in [`supabase/migrations/0001_proofpath_schema.sql`](supabase/migr
 
 ### 1. Database (once)
 
-1. In the Supabase dashboard, open the **SQL editor** and run `supabase/migrations/0001_proofpath_schema.sql`. It only creates the `proofpath` schema and the `proofpath-documents` bucket; nothing in `public` changes.
-2. Go to **Project Settings → Data API → Exposed schemas**, add `proofpath` and save.
+In the Supabase dashboard, open the **SQL editor** and run, in order:
+
+1. `supabase/migrations/0001_proofpath_schema.sql`: the `proofpath` schema, its tables, the audit hash chain and the `proofpath-documents` bucket. Nothing in `public` changes.
+2. `supabase/migrations/0002_rls.sql`: locks the schema to the API. It stops with an error if anything is still open to a browser role.
+3. `supabase/migrations/0003_seed_reference.sql`: categories, document types, checklists, extraction templates and the illustrative rules.
+
+Then go to **Project Settings → Data API → Exposed schemas**, add `proofpath` and save.
 
 ### 2. Backend
 
 ```bash
 cd backend
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env               # Same SUPABASE_* values as Nirikshan
-PYTHONPATH=. .venv/bin/python -m seed.demo   # Demo accounts, 2 case files, 1 pattern
+cp .env.example .env                           # Same SUPABASE_* values as Nirikshan
+PYTHONPATH=. .venv/bin/python -m seed.demo     # Demo accounts, 2 institutions, 2 draft applications
+PYTHONPATH=. .venv/bin/python -m seed.samples  # Synthetic files to upload, in seed/samples/
 PYTHONPATH=. .venv/bin/uvicorn main:app --reload --port 8001
 ```
 
-API docs: http://localhost:8001/docs
+API docs: http://localhost:8001/docs. Scanned pages are read only with Tesseract installed
+(`brew install tesseract`) and `OCR_ENABLED=true`; without it their values go to a reviewer to confirm.
 
-The seed script creates and updates only `@proofpath.demo` accounts and refuses any other email, so it cannot change a Nirikshan account.
+The seed script creates and updates only `@proofpath.demo` accounts and refuses any other email, so it
+cannot change a Nirikshan account.
 
 ### 3. Frontend
 
@@ -78,11 +79,11 @@ Password for all: `password123`
 
 | Email | Role |
 | :--- | :--- |
-| `verifier@proofpath.demo` | Verifier: opens case files, confirms or overrules findings |
-| `analyst@proofpath.demo` | Analyst: reviews patterns across institutions |
-| `institution@proofpath.demo` | Institution: sees its own case files |
-| `auditor@proofpath.demo` | Auditor: read-only |
-| `admin@proofpath.demo` | Administrator: accounts only, no case files |
+| `institution@proofpath.demo` | Institution: Aarohan Institute of Technology. Uploads documents |
+| `institution2@proofpath.demo` | Institution: Vindhya College of Engineering. Shows that institutions never see each other's files |
+| `reviewer@proofpath.demo` | Scrutiny reviewer: opens any application and its documents |
+| `ruleadmin@proofpath.demo` | Rule administrator |
+| `ruleadmin2@proofpath.demo` | Second rule administrator, for four-eyes approval of rule changes |
 
 ---
 
@@ -90,21 +91,25 @@ Password for all: `password123`
 
 ```
 proofpath-ai/
-├── frontend/                Next.js 16, same palette and components as Nirikshan
-│   ├── app/                 welcome, login, mfa, dashboard (case files), cases/[id], patterns
-│   ├── components/          Brand, Navbar, ui (shared look), ServerWakeNote
-│   └── lib/                 API client, Supabase client, types
+├── frontend/                Next.js 16, Tailwind 4 (tokens in app/globals.css)
+│   ├── app/                 welcome, login, mfa, institution/*, review/*, admin/rules
+│   ├── components/          ui, FileCover, documents, DemoAccounts, Navbar, Brand
+│   └── lib/                 API client, upload flow, Supabase client, types
 ├── backend/                 FastAPI
-│   ├── core/                Settings, schema-bound database client, auth and roles, rate limiting
-│   ├── routers/             auth, cases, patterns
-│   ├── services/            audit (hash chain), llm (Groq)
-│   ├── seed/                Demo data
+│   ├── core/                settings, schema-bound database, roles, access rules, as-of date, rate limits
+│   ├── routers/             auth, applications, documents, reference
+│   ├── services/            pipeline, extraction, normalise, audit, llm (Groq)
+│   ├── schemas/             request bodies
+│   ├── seed/                demo accounts, sample files
 │   └── tests/
-└── supabase/migrations/     The proofpath schema
+├── supabase/migrations/     0001 schema, 0002 lockdown, 0003 reference data
+├── design/                  the design tokens
+└── ASSUMPTIONS.md
 ```
 
 ## Tests
 
 ```bash
 cd backend && PYTHONPATH=. .venv/bin/pytest -q
+cd frontend && npx tsc --noEmit && npx eslint . && npm run build
 ```

@@ -2,13 +2,12 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from core.security import AuthenticatedUser, MFA_ROLES, get_current_user, mfa_satisfied, require_role
-from routers import auth, cases
-from services import audit
+from core.security import AuthenticatedUser, MFA_ROLES, get_current_user, mfa_satisfied
+from routers import applications, auth, documents, reference
 
 app = FastAPI(
     title="ProofPath AI API",
-    description="Traceable case files for AICTE applications (SIH26261)",
+    description="Evidence-first validation of AICTE applications (SIH26261). Decision support only.",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -23,9 +22,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(cases.router, prefix="/api/v1")
-app.include_router(cases.patterns_router, prefix="/api/v1")
+for module in (auth, applications, documents, reference):
+    app.include_router(module.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Health"])
@@ -50,11 +48,6 @@ async def get_me(user: AuthenticatedUser = Depends(get_current_user)):
         "mfa_role": user.role in MFA_ROLES,
         "mfa_required": not mfa_satisfied(user),
     }
-
-
-@app.get("/api/v1/audit/verify", tags=["Audit"])
-async def verify_audit(user: AuthenticatedUser = Depends(require_role(["auditor", "verifier", "analyst"]))):
-    return audit.verify_chain()
 
 
 if __name__ == "__main__":

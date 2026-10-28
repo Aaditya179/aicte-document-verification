@@ -12,7 +12,7 @@ Every finding is decision support only. Reviewers resolve, dismiss or request ev
 
 ## Sister project: Nirikshan
 
-ProofPath was started on 2026-10-28 from **Nirikshan** (SIH26262, AICTE approval workflow and SLA monitoring) at `~/Desktop/projects/aicte-workflow` (GitHub `Aaditya179/aicte-workflow`). The two share **one Supabase project** and the **same UI**. Look at Nirikshan's code when you need a reference implementation, for example OCR of documents, document field matching across units and spellings (`backend/services/doc_fields.py`), document upload and storage, and the copilot's number guard.
+ProofPath was started on 2026-10-28 from **Nirikshan** (SIH26262, AICTE approval workflow and SLA monitoring) at `~/Desktop/projects/aicte-workflow` (GitHub `Aaditya179/aicte-workflow`). The two share **one Supabase project**; since phase 1 ProofPath has its own look. ProofPath's own repository is GitHub `Aaditya179/aicte-document-verification`. Look at Nirikshan's code when you need a reference implementation, for example OCR of documents, document field matching across units and spellings (`backend/services/doc_fields.py`), document upload and storage, and the copilot's number guard.
 
 ### Rules for the shared Supabase project (do not break)
 - **All ProofPath tables are in the `proofpath` schema.** Never create ProofPath tables in `public`, which is Nirikshan's. Backend code goes through `core/db.py`, whose `db.table()` is bound to `settings.SUPABASE_SCHEMA`.
@@ -25,16 +25,18 @@ ProofPath was started on 2026-10-28 from **Nirikshan** (SIH26262, AICTE approval
 
 ## Status
 
-**Phase 0 (setup) done on 28/10/2026.** The next step is phase 1 (foundation).
+**Phases 0 (setup) and 1 (foundation) done on 28/10/2026.** The next step is phase 2 (core validation: checks C1 to C6, statuses, priority, case page, review actions, Case File, the 30-application seed).
 
-What exists comes from an earlier model, built before the spec. Phase 1 replaces it:
-- Migration `0001_proofpath_schema.sql` (cases, facts, checks, patterns). It was **never applied**, so phase 1 rewrites it in place with the spec's tables in the `proofpath` schema. `proofpath` is not yet an exposed schema.
-- Backend parts to keep: login with rate limiting and lockout (`routers/auth.py`), `/me`, MFA (`core/security.py`), `services/audit.py` (hash chain), `services/llm.py` (Groq with failsafe key), and `core/config.py`, which has the spec's upload, OCR and as-of date settings.
-- Parts to replace: `routers/cases.py`, `seed/demo.py`, and the pages `/dashboard`, `/cases/[id]` and `/patterns`. The welcome, login and MFA pages are reworked.
+Phase 1 built:
+- Migrations `0001_proofpath_schema.sql` (spec tables in the `proofpath` schema, audit functions `audit_append`, `audit_verify`, `rule_ver`), `0002_rls.sql` (lockdown: RLS on, no browser grants), `0003_seed_reference.sql` (categories, document types, checklists, extraction templates, comparison pairs, the 14 illustrative rules, priority weights). **Applied on 28/10/2026**, and `proofpath` is an exposed schema. The browser's anon key gets `permission denied for schema proofpath` (checked).
+- Backend: `core/access.py` (who sees which application; another institution's reads as 404), `services/pipeline.py` (signed upload, file check, versions, background reading), `services/extraction.py` (PDF text, OCR fallback, templates, faculty lines, photo hash and EXIF), `services/normalise.py`, `services/audit.py` (calls the SQL hash chain). Routes: applications, documents, `/reference`, `/demo/accounts`, `/rules` (read-only), `/audit/verify`.
+- Frontend: welcome, login, MFA, `/institution`, `/institution/applications/[id]` (upload and documents), `/review`, `/review/[id]` (documents beside the values read from them, click a value to open its page), `/admin/rules` (read-only).
+- Seed: `seed/demo.py` (5 accounts, 2 institutions, 1 draft application each), `seed/samples.py` (synthetic files for trying uploads). Both run on the live project on 28/10/2026. The acceptance check uploaded the five sample files to Aarohan's draft `INST-1001-2027-28-01`.
+- Tests: `tests/test_access.py`, `tests/test_upload_pipeline.py`, `tests/test_normalise_extraction.py`, run against the in-memory database in `tests/fakedb.py`.
 
 ## Roles
 
-These are the target roles from phase 1 on (spec section 4, `ASSUMPTIONS.md` D5). Until then the code still uses the old five.
+Spec section 4, `ASSUMPTIONS.md` D5.
 
 | Role | Access |
 | :--- | :--- |
@@ -50,7 +52,8 @@ MFA is TOTP (aal2). `DEMO_MFA_BYPASS=true` in the local `.env` skips it for demo
 # Backend (port 8001)
 cd backend && PYTHONPATH=. .venv/bin/uvicorn main:app --reload --port 8001
 PYTHONPATH=. .venv/bin/pytest -q
-PYTHONPATH=. .venv/bin/python -m seed.demo     # needs the migration applied first
+PYTHONPATH=. .venv/bin/python -m seed.demo     # needs migrations 0001-0003 applied first
+PYTHONPATH=. .venv/bin/python -m seed.samples  # synthetic files to upload by hand
 
 # Frontend (port 3001)
 cd frontend && npm run dev
@@ -64,7 +67,7 @@ The ports differ from Nirikshan's (8000 and 3000) so both run side by side. Demo
 - **Frontend:** Next.js 16 App Router with **Cache Components on**, React 19, TypeScript strict, Tailwind 4, lucide-react.
   - `useParams` and `useSearchParams` must be inside `<Suspense>`.
   - Don't call `new Date()` during render or prerender; it breaks the build. Compute dates in effects or callbacks.
-- **Look:** the cream and terracotta palette is intended (`design/README.md`): accent `#C25E26` (hover `#A84A19`), light accent `#FBF0E4`, borders `#E8E2D8`, background `#FAF7F2` with the grid texture, headings in serif. Define colours once as tokens in `globals.css` and use only token names in components, never hex values (spec section 13). Every page shows the prototype banner, and status meaning never relies on colour alone. Reuse `components/ui.tsx` (`PageShell`, `Notice`, `Badge`, `card`, buttons, `formatDate`) and `Brand`.
+- **Look:** ProofPath's own look, not Nirikshan's (`design/README.md`): register paper, blue-black ink, green ink (`officer`) only for what a person did, red pencil (`conflict`), and the highlighter (`mark`, the `Mark` component) on every value cited from a document. Martel headings, Mukta interface. Use only the tokens in `globals.css` (`bg-paper`, `text-ink`, `border-rule`, …), never hex values or default Tailwind palette classes. Every page shows the prototype banner (in `layout.tsx`), every screen has a one-line description (`PageShell`), and status meaning never relies on colour alone. Reuse `components/ui.tsx` (`PageShell`, `Notice`, `Tag`, `Mark`, `Loading`, `Empty`, `FileNumber`, buttons, table classes, `formatDate`), `FileCover` and `documents.tsx`.
 - **Dates:** shown as dd/mm/yyyy everywhere (`formatDate`, `formatDateTime`).
 - **Writing style:** plain language and sentence-case headings, with no jargon or all-caps headings.
 - **Words:** never state fraud, forged or fake, and never use approve or reject about an institution or application. Say conflict, mismatch, flag or candidate for review. Findings say what differs and where, never what it implies.

@@ -1,82 +1,161 @@
-export type CheckStatus = 'verified' | 'conflict' | 'unverified';
+export type Role = 'institution' | 'reviewer' | 'rule_admin';
 
-export type Tally = Record<CheckStatus, number>;
+export type WorkflowStatus = 'draft' | 'submitted' | 'under_review' | 'awaiting_institution' | 'review_complete';
 
-export interface Institution {
+export interface InstitutionRef {
   id?: string;
+  code: string;
   name: string;
-  aicte_id: string | null;
-  state?: string | null;
-  city?: string | null;
+  city: string | null;
+  is_fictional?: boolean;
 }
 
-export interface CaseRow {
+export interface Application {
   id: string;
-  case_no: string;
+  code: string;
   institution_id: string;
-  application_type: string;
+  category: 'new_institution' | 'extension_of_approval';
   academic_year: string;
-  status: 'open' | 'in_review' | 'closed';
+  workflow_status: WorkflowStatus;
+  admin_status: 'pending';
+  declared_total_area_sqm: number | null;
+  submitted_at: string | null;
+  review_deadline: string | null;
   created_at: string;
-  institutions: Institution | null;
-  checks: Tally;
 }
 
-export interface Fact {
-  id: string;
-  document_id: string | null;
-  field: string;
-  value_text: string;
-  page: number | null;
-  source_quote: string | null;
-  confidence: number | null;
-  extracted_by: string;
-}
-
-export interface Check {
-  id: string;
-  field: string;
-  status: CheckStatus;
-  reason: string;
-  rule: string | null;
-  facts: Fact[];
-  reviewed_at: string | null;
-  review_note: string | null;
+export interface ApplicationRow extends Application {
+  institution: InstitutionRef;
+  documents: { current: number; failed_check: number; being_read: number };
 }
 
 export interface DocumentRow {
   id: string;
+  application_id: string;
   doc_type: string;
-  title: string;
-  sha256: string | null;
+  version: number;
+  supersedes_id: string | null;
+  status: 'current' | 'superseded';
+  original_name: string | null;
+  mime: string;
+  size_bytes: number | null;
   page_count: number | null;
+  sha256: string | null;
+  integrity_status: 'pending' | 'passed' | 'failed';
+  integrity_note: string | null;
+  processing_status: 'pending' | 'processing' | 'done' | 'error';
+  processing_note: string | null;
   uploaded_at: string;
+  photo_category: string | null;
+  application_code?: string;
+  photo?: {
+    phash: string | null;
+    width: number | null;
+    height: number | null;
+    taken_at: string | null;
+    gps: { lat: number; lon: number } | null;
+    exif: Record<string, string | number> | null;
+  };
 }
 
-export interface Pattern {
-  id: string;
-  kind: string;
-  match_key: string;
-  summary: string;
-  severity: 'low' | 'medium' | 'high';
-  institution_ids: string[];
-  case_ids: string[];
-  status: 'open' | 'confirmed' | 'dismissed';
-  detected_at: string;
+export interface ChecklistItem {
+  doc_type: string;
+  label: string;
+  mandatory: boolean;
+  present: boolean;
 }
 
-export interface CaseFile {
-  case: CaseRow & { institutions: Institution };
+export interface ApplicationDetail {
+  application: Application;
+  institution: InstitutionRef;
   documents: DocumentRow[];
-  checks: Check[];
-  summary: Tally;
-  patterns: Pattern[];
+  checklist: ChecklistItem[];
+  photo_categories: string[];
 }
 
-export const STATUS_META: Record<CheckStatus, { label: string; tone: 'green' | 'red' | 'amber'; blurb: string }> = {
-  verified: { label: 'Verified', tone: 'green', blurb: 'The documents agree with each other and with the record.' },
-  conflict: { label: 'Conflict', tone: 'red', blurb: 'Two sources disagree, or a value breaks a rule.' },
-  unverified: { label: 'Unverified', tone: 'amber', blurb: 'Not enough evidence yet to say either way.' },
+export interface ExtractedField {
+  id: string;
+  field_name: string;
+  field_value: string | null;
+  original_value: string | null;
+  value_type: string;
+  page_number: number | null;
+  source_method: 'PDF_TEXT' | 'OCR' | 'MANUAL' | null;
+  confidence: number | null;
+  review_state: 'auto' | 'needs_confirmation' | 'confirmed' | 'corrected';
+  review_reason: string | null;
+}
+
+export interface FacultyRow {
+  id: string;
+  faculty_code: string;
+  name_raw: string;
+  designation: string | null;
+  qualification: string | null;
+  masked_id: string | null;
+  page_number: number | null;
+  period_start: string | null;
+  period_end: string | null;
+}
+
+export interface DocumentType {
+  code: string;
+  label: string;
+  has_expiry: boolean;
+  signature_required: boolean;
+  is_photo: boolean;
+}
+
+export interface Reference {
+  categories: { code: string; label: string }[];
+  document_types: DocumentType[];
+  required_documents: { category: string; doc_type: string; mandatory: boolean }[];
+}
+
+export interface Rule {
+  id: string;
+  rule_code: string;
+  version: number;
+  title: string | null;
+  description: string | null;
+  check_type: string;
+  params: Record<string, unknown>;
+  severity: string | null;
+  status: 'draft' | 'pending_approval' | 'active' | 'retired';
+  effective_from: string | null;
+  effective_to: string | null;
+  note: string;
+}
+
+export interface DemoAccount {
+  email: string;
+  full_name: string;
+  role: Role;
+  institution: string | null;
+  description: string;
+}
+
+export const ROLE_LABEL: Record<Role, string> = {
+  institution: 'Institution',
+  reviewer: 'Scrutiny reviewer',
+  rule_admin: 'Rule administrator',
+};
+
+export const CATEGORY_LABEL: Record<Application['category'], string> = {
+  new_institution: 'New institution',
+  extension_of_approval: 'Extension of approval',
+};
+
+export const WORKFLOW_LABEL: Record<WorkflowStatus, string> = {
+  draft: 'Draft',
+  submitted: 'Submitted',
+  under_review: 'Under review',
+  awaiting_institution: 'Waiting for the institution',
+  review_complete: 'Review complete',
+};
+
+export const PHOTO_CATEGORY_LABEL: Record<string, string> = {
+  lab: 'Lab', classroom: 'Classroom', library: 'Library', other: 'Other',
 };
 
 export function humanize(code: string) {

@@ -1,0 +1,271 @@
+'use client';
+
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { fetchApi } from '@/lib/api';
+import {
+  PHOTO_CATEGORY_LABEL, humanize,
+  type ApplicationDetail, type DocumentRow, type ExtractedField, type FacultyRow, type Reference,
+} from '@/lib/types';
+import { Checklist, FileCover } from '@/components/FileCover';
+import { FileCheckTag, ReadingTag, documentLink, isBeingRead } from '@/components/documents';
+import { Empty, Loading, Mark, Notice, Tag, btnQuiet, formatDate, formatDateTime, td, th } from '@/components/ui';
+
+type View = { url: string; mime: string; page: number | null };
+
+function howRead(f: ExtractedField) {
+  if (f.source_method === 'OCR') return f.confidence != null ? `OCR, ${Math.round(f.confidence * 100)}% confidence` : 'OCR';
+  if (f.source_method === 'PDF_TEXT') return 'PDF text';
+  if (f.source_method === 'MANUAL') return 'Entered by a reviewer';
+  return '—';
+}
+
+/** The values read from one document. A highlighted value opens the page it was read from. */
+function Values({ fields, faculty, onPage }: { fields: ExtractedField[]; faculty: FacultyRow[]; onPage: (page: number) => void }) {
+  if (fields.length === 0 && faculty.length === 0) {
+    return <Empty>No values are read from this kind of document.</Empty>;
+  }
+  return (
+    <div className="space-y-8">
+      {fields.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[38rem] border-collapse">
+            <thead>
+              <tr>
+                <th className={th}>Value</th>
+                <th className={th}>As read</th>
+                <th className={th}>Page</th>
+                <th className={th}>How it was read</th>
+                <th className={th}>State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fields.map((f) => (
+                <tr key={f.id}>
+                  <td className={`${td} font-semibold`}>{humanize(f.field_name)}</td>
+                  <td className={td}>
+                    {f.original_value
+                      ? <Mark onClick={f.page_number ? () => onPage(f.page_number!) : undefined} title={f.page_number ? `Show page ${f.page_number}` : undefined}>{f.original_value}</Mark>
+                      : <span className="text-ink-3">Not found</span>}
+                    {f.field_value && f.field_value !== f.original_value && <p className="mt-1 text-xs text-ink-2">Compared as {f.field_value}</p>}
+                  </td>
+                  <td className={td}>{f.page_number ?? '—'}</td>
+                  <td className={td}>{howRead(f)}</td>
+                  <td className={td}>
+                    {f.review_state === 'needs_confirmation' ? <Tag tone="pending">Needs confirmation</Tag>
+                      : f.review_state === 'confirmed' ? <Tag tone="ok">Confirmed</Tag>
+                      : f.review_state === 'corrected' ? <Tag tone="ok">Corrected</Tag>
+                      : <Tag>Read</Tag>}
+                    {f.review_reason && <p className="mt-1 max-w-64 text-xs text-ink-2">{f.review_reason}</p>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {faculty.length > 0 && (
+        <div>
+          <h3 className="mb-2 font-semibold">Faculty listed ({faculty.length})</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[42rem] border-collapse">
+              <thead>
+                <tr>
+                  <th className={th}>Code</th>
+                  <th className={th}>Name</th>
+                  <th className={th}>Designation</th>
+                  <th className={th}>Qualification</th>
+                  <th className={th}>ID</th>
+                  <th className={th}>Period</th>
+                </tr>
+              </thead>
+              <tbody>
+                {faculty.map((p) => (
+                  <tr key={p.id}>
+                    <td className={td}>{p.faculty_code}</td>
+                    <td className={td}><Mark onClick={p.page_number ? () => onPage(p.page_number!) : undefined}>{p.name_raw}</Mark></td>
+                    <td className={td}>{p.designation}</td>
+                    <td className={td}>{p.qualification}</td>
+                    <td className={`${td} tabular-nums`}>{p.masked_id}</td>
+                    <td className={td}>{formatDate(p.period_start)} to {p.period_end ? formatDate(p.period_end) : 'now'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhotoDetails({ doc }: { doc: DocumentRow }) {
+  if (!doc.photo) return null;
+  const p = doc.photo;
+  return (
+    <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-4">
+      <div><dt className="text-ink-2">Shows</dt><dd className="font-semibold">{PHOTO_CATEGORY_LABEL[doc.photo_category ?? ''] ?? '—'}</dd></div>
+      <div><dt className="text-ink-2">Taken</dt><dd className="font-semibold">{p.taken_at ? formatDateTime(p.taken_at) : 'No date in the file'}</dd></div>
+      <div><dt className="text-ink-2">Size</dt><dd className="font-semibold">{p.width} × {p.height} px</dd></div>
+      <div><dt className="text-ink-2">Visual fingerprint</dt><dd className="font-semibold tabular-nums">{p.phash ?? '—'}</dd></div>
+      {p.gps && <div><dt className="text-ink-2">Location in the file</dt><dd className="font-semibold">{p.gps.lat}, {p.gps.lon}</dd></div>}
+    </dl>
+  );
+}
+
+function ReviewApplication() {
+  const { id } = useParams<{ id: string }>();
+  const [detail, setDetail] = useState<ApplicationDetail | null>(null);
+  const [types, setTypes] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<DocumentRow | null>(null);
+  const [values, setValues] = useState<{ fields: ExtractedField[]; faculty: FacultyRow[] } | null>(null);
+  const [view, setView] = useState<View | null>(null);
+  const [viewError, setViewError] = useState<string | null>(null);
+  const [showOld, setShowOld] = useState(false);
+
+  const [version, setVersion] = useState(0);
+  const load = () => setVersion((v) => v + 1);
+
+  useEffect(() => {
+    fetchApi<ApplicationDetail>(`/applications/${id}`).then(({ data, error }) => (data ? setDetail(data) : setError(error)));
+  }, [id, version]);
+
+  useEffect(() => {
+    fetchApi<Reference>('/reference').then(({ data }) => data && setTypes(Object.fromEntries(data.document_types.map((t) => [t.code, t.label]))));
+  }, []);
+
+  // Links expire after a few minutes, so every page jump asks for a fresh one
+  const show = useCallback(async (doc: DocumentRow, page: number | null) => {
+    setViewError(null);
+    const { url, mime, error } = await documentLink(doc.id);
+    if (url) setView({ url, mime: mime ?? doc.mime, page });
+    else setViewError(error);
+  }, []);
+
+  const select = useCallback(async (doc: DocumentRow) => {
+    setSelected(doc);
+    setValues(null);
+    setView(null);
+    if (doc.integrity_status === 'pending') return;
+    show(doc, 1);
+    const [fields, full] = await Promise.all([
+      fetchApi<{ fields: ExtractedField[]; faculty: FacultyRow[] }>(`/documents/${doc.id}/fields`),
+      fetchApi<DocumentRow>(`/documents/${doc.id}`),
+    ]);
+    setValues(fields.data ?? { fields: [], faculty: [] });
+    if (full.data) setSelected(full.data);
+  }, [show]);
+
+  if (error) return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><Notice kind="error">{error}</Notice></div>;
+  if (!detail) return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><Loading what="Opening the application" /></div>;
+
+  const documents = detail.documents.filter((d) => showOld || d.status === 'current');
+  const superseded = detail.documents.length - detail.documents.filter((d) => d.status === 'current').length;
+
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-10 px-4 py-8 sm:px-6">
+      <div>
+        <Link href="/review" className={btnQuiet}>Applications</Link>
+        <div className="mt-4"><FileCover detail={detail} /></div>
+      </div>
+
+      <Checklist detail={detail} />
+
+      <section aria-labelledby="documents" className="grid gap-8 lg:grid-cols-[20rem_1fr]">
+        <div>
+          <h2 id="documents" className="font-serif text-xl font-bold">Documents</h2>
+          {detail.documents.some(isBeingRead) && (
+            <p className="mt-1 text-sm text-pending">Some documents are still being read. <button className={btnQuiet} onClick={load}>Refresh</button></p>
+          )}
+          {documents.length === 0 ? (
+            <div className="mt-3"><Empty>The institution has not uploaded any documents yet.</Empty></div>
+          ) : (
+            <ul className="mt-3 border-t border-rule">
+              {documents.map((d) => (
+                <li key={d.id}>
+                  <button onClick={() => select(d)} aria-current={selected?.id === d.id ? 'true' : undefined}
+                    className={`w-full border-b border-rule px-3 py-3 text-left ${selected?.id === d.id ? 'bg-ink-wash' : 'hover:bg-sheet'}`}>
+                    <span className="block font-semibold">
+                      {types[d.doc_type] ?? humanize(d.doc_type)}
+                      {d.photo_category && <span className="font-normal">, {PHOTO_CATEGORY_LABEL[d.photo_category] ?? d.photo_category}</span>}
+                    </span>
+                    <span className="mt-1 flex flex-wrap gap-1.5">
+                      <FileCheckTag doc={d} />
+                      <ReadingTag doc={d} />
+                      {d.version > 1 && <Tag>Version {d.version}</Tag>}
+                      {d.status === 'superseded' && <Tag>Replaced</Tag>}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {superseded > 0 && (
+            <button className={`${btnQuiet} mt-3`} onClick={() => setShowOld((v) => !v)}>
+              {showOld ? 'Hide replaced versions' : `Show ${superseded} replaced version${superseded > 1 ? 's' : ''}`}
+            </button>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          {!selected ? (
+            <Empty>Choose a document to see it beside the values read from it.</Empty>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <div>
+                  <h3 className="font-serif text-lg font-bold">{types[selected.doc_type] ?? humanize(selected.doc_type)}</h3>
+                  <p className="text-sm text-ink-2">
+                    {selected.original_name}, version {selected.version}, uploaded {formatDateTime(selected.uploaded_at)}
+                  </p>
+                </div>
+                {view && <a href={view.url} target="_blank" rel="noreferrer" className={btnQuiet}>Open in a new tab</a>}
+              </div>
+
+              {selected.integrity_status === 'failed' && (
+                <Notice kind="error">This file failed the file check, so it is not read or used: {selected.integrity_note}</Notice>
+              )}
+              {selected.sha256 && (
+                <p className="text-xs text-ink-2">SHA-256 fingerprint <span className="break-all tabular-nums text-ink">{selected.sha256}</span></p>
+              )}
+
+              {viewError && <Notice kind="error">{viewError}</Notice>}
+              {view && (
+                <div className="overflow-hidden rounded-sheet border border-rule-strong bg-sheet">
+                  {view.mime === 'application/pdf' ? (
+                    <iframe key={`${view.url}#${view.page}`} src={`${view.url}#page=${view.page ?? 1}`}
+                      title={`${selected.original_name}, page ${view.page ?? 1}`} className="h-[36rem] w-full" />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={view.url} alt={`${types[selected.doc_type] ?? 'Document'} uploaded by the institution`} className="max-h-[36rem] w-full object-contain" />
+                  )}
+                </div>
+              )}
+              {view?.page && view.mime === 'application/pdf' && <p className="text-sm text-ink-2">Showing page {view.page}.</p>}
+
+              <PhotoDetails doc={selected} />
+
+              {selected.integrity_status === 'passed' && (
+                <div>
+                  <h3 className="mb-3 font-serif text-lg font-bold">Values read from this document</h3>
+                  {selected.processing_status === 'error' && <Notice kind="warning">{selected.processing_note}</Notice>}
+                  {!values ? <Loading what="Loading values" /> : <Values {...values} onPage={(page) => show(selected, page)} />}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><Loading what="Opening the application" /></div>}>
+      <ReviewApplication />
+    </Suspense>
+  );
+}

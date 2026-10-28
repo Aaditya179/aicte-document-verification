@@ -2,31 +2,37 @@
 
 import React, { useEffect, useState } from 'react';
 import { fetchApi } from '@/lib/api';
+import type { Role } from '@/lib/types';
 
-// Shared look, following the palette in globals.css (the same as Nirikshan)
-export const card = 'bg-white border border-[#E8E2D8] rounded-xl p-5';
+// Shared look. Colours come only from the tokens in globals.css.
+export const sheet = 'rounded-sheet border border-rule bg-sheet';
+export const card = `${sheet} p-5`;
 export const btnPrimary =
-  'inline-flex items-center justify-center gap-2 rounded-lg bg-[#C25E26] px-4 py-2 text-sm font-semibold text-white hover:bg-[#A84A19] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C25E26]';
+  'inline-flex items-center justify-center gap-2 rounded-control bg-ink px-4 py-2 text-sm font-semibold text-sheet hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-50';
 export const btnSecondary =
-  'inline-flex items-center justify-center gap-2 rounded-lg border border-[#E8E2D8] bg-white px-4 py-2 text-sm font-medium text-stone-800 hover:bg-[#FBF0E4] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C25E26]';
-export const btnDanger =
-  'inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600';
+  'inline-flex items-center justify-center gap-2 rounded-control border border-ink bg-sheet px-4 py-2 text-sm font-semibold text-ink hover:bg-ink-wash disabled:cursor-not-allowed disabled:opacity-50';
+export const btnQuiet =
+  'inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-sm font-medium text-ink underline decoration-rule-strong underline-offset-4 hover:decoration-ink disabled:opacity-50';
 export const input =
-  'w-full rounded-lg border border-[#E8E2D8] bg-white px-3 py-2 text-sm text-stone-900 focus:border-[#C25E26] focus:outline-none focus:ring-2 focus:ring-[#FBF0E4]';
-export const label = 'block text-xs font-semibold text-stone-600 mb-1';
+  'w-full rounded-control border border-rule-strong bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none';
+export const label = 'mb-1 block text-sm font-semibold text-ink';
+export const th = 'border-b border-rule-strong px-3 py-2 text-left text-xs font-semibold text-ink-2';
+export const td = 'border-b border-rule px-3 py-2.5 align-top text-sm';
 
-export function PageShell({ title, subtitle, actions, children }: {
-  title: string;
-  subtitle?: string;
+export function PageShell({ title, description, actions, children, wide = false }: {
+  title: React.ReactNode;
+  /** One line saying what this screen is for (build spec section 13) */
+  description: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900">{title}</h1>
-          {subtitle && <p className="mt-1 max-w-3xl text-sm text-stone-600">{subtitle}</p>}
+    <div className={`mx-auto w-full ${wide ? 'max-w-7xl' : 'max-w-5xl'} px-4 py-8 sm:px-6`}>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div className="max-w-2xl">
+          <h1 className="font-serif text-3xl font-bold leading-tight">{title}</h1>
+          <p className="mt-2 text-ink-2">{description}</p>
         </div>
         {actions}
       </div>
@@ -37,33 +43,71 @@ export function PageShell({ title, subtitle, actions, children }: {
 
 export function Notice({ kind = 'info', children }: { kind?: 'info' | 'error' | 'success' | 'warning'; children: React.ReactNode }) {
   const styles = {
-    info: 'border-[#E8E2D8] bg-[#FBF0E4] text-stone-800',
-    error: 'border-red-200 bg-red-50 text-red-800',
-    success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-    warning: 'border-amber-200 bg-amber-50 text-amber-900',
+    info: 'border-rule-strong bg-sheet text-ink',
+    error: 'border-conflict bg-conflict-wash text-conflict',
+    success: 'border-officer bg-officer-wash text-officer',
+    warning: 'border-pending bg-pending-wash text-pending',
   }[kind];
-  return <div role={kind === 'error' ? 'alert' : 'status'} className={`rounded-lg border px-4 py-3 text-sm ${styles}`}>{children}</div>;
+  return (
+    <div role={kind === 'error' ? 'alert' : 'status'} className={`rounded-sheet border-l-4 border px-4 py-3 text-sm ${styles}`}>
+      {children}
+    </div>
+  );
 }
 
-export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'red' | 'amber' | 'green' | 'blue'; children: React.ReactNode }) {
+export type Tone = 'neutral' | 'ok' | 'conflict' | 'pending' | 'active';
+
+/** A status in words; colour only reinforces the text, never replaces it. */
+export function Tag({ tone = 'neutral', children }: { tone?: Tone; children: React.ReactNode }) {
   const styles = {
-    neutral: 'bg-stone-100 text-stone-700',
-    red: 'bg-red-100 text-red-800',
-    amber: 'bg-amber-100 text-amber-900',
-    green: 'bg-emerald-100 text-emerald-800',
-    blue: 'bg-sky-100 text-sky-800',
+    neutral: 'border-rule-strong text-ink-2',
+    ok: 'border-officer text-officer',
+    conflict: 'border-conflict text-conflict',
+    pending: 'border-pending text-pending bg-pending-wash',
+    active: 'border-ink text-ink bg-ink-wash',
   }[tone];
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${styles}`}>{children}</span>;
+  return <span className={`inline-flex items-center whitespace-nowrap rounded-[2px] border px-1.5 py-px text-xs font-semibold ${styles}`}>{children}</span>;
+}
+
+/** A value read from a document, highlighted as cited evidence. */
+export function Mark({ children, onClick, title }: { children: React.ReactNode; onClick?: () => void; title?: string }) {
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} title={title} className="mark mark-link text-left font-semibold">
+        {children}
+      </button>
+    );
+  }
+  return <span className="mark font-semibold" title={title}>{children}</span>;
+}
+
+export function Loading({ what = 'Loading' }: { what?: string }) {
+  return <p className="py-6 text-sm text-ink-2" role="status">{what}…</p>;
+}
+
+export function Empty({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-sheet border border-dashed border-rule-strong px-5 py-8 text-center text-sm text-ink-2">{children}</div>;
+}
+
+/** The file number, set the way it appears on a file cover. */
+export function FileNumber({ code }: { code: string }) {
+  return <span className="font-serif font-bold tabular-nums tracking-wide">{code}</span>;
 }
 
 export interface Me {
   user_id: string;
   email: string;
-  role: 'institution' | 'verifier' | 'analyst' | 'auditor' | 'admin';
+  role: Role;
   institution_id: string | null;
   full_name: string | null;
   mfa_required: boolean;
 }
+
+export const HOME: Record<Role, string> = {
+  institution: '/institution',
+  reviewer: '/review',
+  rule_admin: '/admin/rules',
+};
 
 export function useMe() {
   const [me, setMe] = useState<Me | null>(null);
@@ -94,15 +138,19 @@ export function formatTime(value?: string | Date | null) {
   return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function formatDate(value?: string | Date | null, opts: { weekday?: boolean } = {}) {
+export function formatDate(value?: string | Date | null) {
   if (!value) return '—';
   const d = toDate(value);
-  if (Number.isNaN(d.getTime())) return String(value);
-  return opts.weekday ? `${d.toLocaleDateString('en-IN', { weekday: 'short' })}, ${ddmmyyyy(d)}` : ddmmyyyy(d);
+  return Number.isNaN(d.getTime()) ? String(value) : ddmmyyyy(d);
 }
 
 export function formatDateTime(value?: string | Date | null) {
   if (!value) return '—';
   const d = toDate(value);
   return Number.isNaN(d.getTime()) ? String(value) : `${ddmmyyyy(d)}, ${formatTime(d)}`;
+}
+
+export function formatBytes(n?: number | null) {
+  if (!n) return '—';
+  return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 }

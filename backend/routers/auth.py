@@ -111,7 +111,7 @@ async def verify_otp(req: OtpVerify):
 
 @router.get("/mfa-status")
 async def mfa_status(user: AuthenticatedUser = Depends(get_current_user)):
-    """Whether this session still needs a TOTP step before verifier and analyst routes accept it."""
+    """Whether this session still needs a TOTP step before reviewer and rule admin routes accept it."""
     return {
         "role": user.role,
         "aal": user.aal,

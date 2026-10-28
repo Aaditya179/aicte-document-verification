@@ -8,13 +8,14 @@ import { card, btnPrimary, btnSecondary, input, label, Notice } from '@/componen
 type Step = 'loading' | 'enroll' | 'verify' | 'done';
 
 /**
- * Second sign-in step for verifiers and analysts: enrol an authenticator app once, then enter its
+ * Second sign-in step for reviewers and rule administrators: enrol an authenticator app once, then enter its
  * six-digit code each time. A verified code raises the session to aal2, which their routes require.
  */
 function MfaContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get('next') || '/dashboard';
+  const requested = params.get('next') || '/';
+  const next = requested.startsWith('/') && !requested.startsWith('//') ? requested : '/';
   const [step, setStep] = useState<Step>('loading');
   const [factorId, setFactorId] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -69,22 +70,22 @@ function MfaContent() {
   return (
     <div className="mx-auto w-full max-w-md px-4 py-12">
       <div className={card}>
-        <h1 className="text-xl font-bold text-stone-900">Verify it’s you</h1>
-        <p className="mt-1 text-sm text-stone-600">Verifier and analyst accounts use a second step: a six-digit code from an authenticator app.</p>
+        <h1 className="font-serif text-2xl font-bold">Confirm it’s you</h1>
+        <p className="mt-2 text-sm text-ink-2">Reviewer and rule administrator accounts use a second step: a six-digit code from an authenticator app.</p>
 
-        {step === 'loading' && !error && <p className="mt-6 text-sm text-stone-500">Checking your account…</p>}
+        {step === 'loading' && !error && <p className="mt-6 text-sm text-ink-2">Checking your account…</p>}
 
         {step === 'enroll' && (
           <div className="mt-6 space-y-4">
-            <p className="text-sm text-stone-800">1. Scan this code with Google Authenticator, Microsoft Authenticator or a similar app.</p>
+            <p className="text-sm text-ink">1. Scan this code with Google Authenticator, Microsoft Authenticator or a similar app.</p>
             {qr && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={qr} alt="QR code to add ProofPath to your authenticator app" className="mx-auto h-48 w-48 rounded-lg border border-[#E8E2D8] bg-white p-2" />
+              <img src={qr} alt="QR code to add ProofPath to your authenticator app" className="mx-auto h-48 w-48 rounded-sheet border border-rule bg-sheet p-2" />
             )}
             {secret && (
-              <p className="text-xs text-stone-600">Can’t scan? Enter this key: <code className="break-all font-mono text-stone-900">{secret}</code></p>
+              <p className="text-xs text-ink-2">Can’t scan? Enter this key: <code className="break-all font-mono text-ink">{secret}</code></p>
             )}
-            <p className="text-sm text-stone-800">2. Enter the six-digit code the app shows.</p>
+            <p className="text-sm text-ink">2. Enter the six-digit code the app shows.</p>
           </div>
         )}
 
@@ -109,7 +110,7 @@ function MfaContent() {
 
 export default function MfaPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-sm text-stone-500">Loading…</div>}>
+    <Suspense fallback={<div className="p-8 text-sm text-ink-2">Loading…</div>}>
       <MfaContent />
     </Suspense>
   );

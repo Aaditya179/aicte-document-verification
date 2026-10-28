@@ -1,84 +1,38 @@
 """
-Hash-chained audit log in proofpath.audit_log.
+Append-only, hash-chained audit trail in proofpath.audit_events.
 
-Each entry's hash is SHA-256 of the previous entry's hash plus the canonical JSON of the entry,
-so editing any stored row breaks the chain from that row on. Writes are not serialised across
-processes, which is enough for a single API instance.
+The chain is built inside Postgres: proofpath.audit_append takes a lock, reads the last hash and
+inserts the new event with SHA-256(previous hash | its fields), so concurrent API workers cannot fork
+the chain. proofpath.audit_verify recomputes every hash with the same formula. A trigger rejects any
+update, delete or truncate.
 """
-import hashlib
-import json
 from typing import Any, Optional
 
 from core.db import db
 from core.security import AuthenticatedUser
 
-GENESIS = "GENESIS"
-
-
-def canonical(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)
-
-
-def _plain(value: Any) -> Any:
-    """The value as it will come back from a jsonb column, so hashing is stable across the round trip."""
-    return None if value is None else json.loads(canonical(value))
-
-
-def _payload(row: dict) -> str:
-    return canonical({
-        "actor": row.get("actor_id"),
-        "role": row.get("actor_role"),
-        "action": row.get("action"),
-        "entity": [row.get("entity_type"), row.get("entity_id")],
-        "before": row.get("before"),
-        "after": row.get("after"),
-        "reason": row.get("reason"),
-    })
-
-
-def _last_hash() -> str:
-    res = db.table("audit_log").select("hash").order("seq", desc=True).limit(1).execute()
-    return res.data[0]["hash"] if res.data else GENESIS
-
 
 def record(
-    actor: AuthenticatedUser,
-    action: str,
-    entity_type: str,
-    entity_id: Optional[str],
-    before: Optional[Any] = None,
-    after: Optional[Any] = None,
-    reason: Optional[str] = None,
-) -> dict:
-    entry = {
-        "actor_id": actor.id,
-        "actor_role": actor.role,
-        "action": action,
-        "entity_type": entity_type,
-        "entity_id": str(entity_id) if entity_id is not None else None,
-        "before": _plain(before),
-        "after": _plain(after),
-        "reason": reason,
-    }
-    prev = _last_hash()
-    entry["prev_hash"] = prev
-    entry["hash"] = hashlib.sha256((prev + _payload(entry)).encode()).hexdigest()
-    return db.insert("audit_log", entry) or entry
+    actor: Optional[AuthenticatedUser],
+    event_type: str,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[Any] = None,
+    application_id: Optional[str] = None,
+    detail: Optional[dict] = None,
+) -> int:
+    """Append one event and return its id. `actor` is None for system events (background processing)."""
+    res = db.rpc("audit_append", {
+        "p_actor": actor.id if actor else None,
+        "p_role": actor.role if actor else "system",
+        "p_type": event_type,
+        "p_entity_type": entity_type,
+        "p_entity_id": str(entity_id) if entity_id is not None else None,
+        "p_app": application_id,
+        "p_detail": detail,
+    }).execute()
+    return res.data
 
 
 def verify_chain() -> dict:
-    """Recompute every hash in order. Returns {ok: True, entries_verified} or the first broken seq."""
-    rows, page = [], 1000
-    while True:
-        batch = db.table("audit_log").select("*").order("seq").range(len(rows), len(rows) + page - 1).execute().data or []
-        rows.extend(batch)
-        if len(batch) < page:
-            break
-
-    prev = GENESIS
-    for row in rows:
-        expected = hashlib.sha256((prev + _payload(row)).encode()).hexdigest()
-        if row["prev_hash"] != prev or row["hash"] != expected:
-            return {"ok": False, "broken_at_seq": row["seq"], "message": f"Hash mismatch at entry {row['seq']}"}
-        prev = row["hash"]
-    return {"ok": True, "entries_verified": len(rows)}
+    """{ok, events_checked, broken_at_id}: the first event whose hash no longer matches, if any."""
+    return db.rpc("audit_verify").execute().data

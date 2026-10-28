@@ -1,48 +1,98 @@
 @import "tailwindcss";
 
+/*
+ * ProofPath design tokens (design/README.md). Components use only these names, never hex values.
+ *
+ * The look comes from Indian government file practice: register paper, blue-black ink, green ink
+ * reserved for an officer's own action, red pencil for a conflict, and a highlighter on every value
+ * cited from a document.
+ */
+@theme {
+  --color-paper: #F3F4EF;        /* page: cool register paper */
+  --color-sheet: #FCFCFA;        /* a sheet laid on the page */
+  --color-ink: #1E2A44;          /* blue-black ink: text and primary actions */
+  --color-ink-2: #4F5B73;        /* secondary text */
+  --color-ink-3: #636D85;        /* quiet text, still 4.5:1 on sheet */
+  --color-ink-wash: #E4E9F2;     /* selected rows */
+  --color-rule: #CDD3CC;         /* ruled lines and borders */
+  --color-rule-strong: #A3ADA5;
+  --color-officer: #1F6A4A;      /* green ink: what a person confirmed or did */
+  --color-officer-wash: #E2EFE7;
+  --color-conflict: #B42318;     /* red pencil: a conflict or a failed check */
+  --color-conflict-wash: #FBE8E5;
+  --color-pending: #7A4E00;      /* waiting for a person */
+  --color-pending-wash: #FBF0D0;
+  --color-mark: #F6E36A;         /* highlighter on a cited value */
+
+  --font-sans: var(--font-mukta), system-ui, sans-serif;
+  --font-serif: var(--font-martel), Georgia, serif;
+
+  --radius-sheet: 4px;
+  --radius-control: 3px;
+}
+
 :root {
   color-scheme: light;
-  --background: #FAF7F2;
-  --foreground: #1C1917;
-  --primary: #C25E26;
-  --primary-hover: #A84A19;
-  --primary-light: #FBF0E4;
-  --border-color: #E8E2D8;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: var(--font-geist-mono), monospace;
-  --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
-}
-
-html {
-  background-color: #FAF7F2 !important;
-  color: #1C1917 !important;
-  color-scheme: light !important;
+html,
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
 }
 
 body {
-  background-color: #FAF7F2 !important;
-  color: #1C1917 !important;
-  color-scheme: light !important;
   font-family: var(--font-sans);
-  background-image: 
-    linear-gradient(to right, rgba(28, 25, 23, 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(28, 25, 23, 0.045) 1px, transparent 1px) !important;
-  background-size: 36px 36px !important;
-  background-attachment: fixed !important;
-  min-height: 100vh;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Grid texture */
-.bg-grid-texture {
-  background-color: #FAF7F2 !important;
-  background-image: 
-    linear-gradient(to right, rgba(28, 25, 23, 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(28, 25, 23, 0.045) 1px, transparent 1px) !important;
-  background-size: 36px 36px !important;
+/* The ledger's double rule, under the header and under a file's cover */
+.ledger-rule {
+  border-bottom: 3px double var(--color-rule-strong);
 }
 
+/*
+ * A value cited from a document, marked as with a highlighter: the mark sits low and slightly
+ * ragged, the way a real stroke does, rather than as a flat box.
+ */
+.mark {
+  background-image: linear-gradient(176deg, transparent 0 18%, var(--color-mark) 18% 88%, transparent 88%);
+  padding: 0 0.2em;
+  margin: 0 -0.05em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.mark-link {
+  cursor: pointer;
+  text-decoration: underline dotted var(--color-ink-3);
+  text-underline-offset: 3px;
+}
+
+.mark-link:hover,
+.mark-link:focus-visible {
+  text-decoration-style: solid;
+  text-decoration-color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Register paper: faint ruled lines, used for document specimens */
+.ruled {
+  background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--color-rule) 31px 32px);
+  background-position: 0 14px;
+}

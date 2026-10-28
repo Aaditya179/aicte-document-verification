@@ -19,9 +19,9 @@ from core.db import db
 
 security_scheme = HTTPBearer()
 
-ROLES = {"institution", "verifier", "analyst", "auditor", "admin"}
-# Roles that read case files across institutions and therefore need MFA
-MFA_ROLES = {"verifier", "analyst"}
+ROLES = {"institution", "reviewer", "rule_admin"}
+# Roles that see every institution's data or change rules, and therefore need MFA
+MFA_ROLES = {"reviewer", "rule_admin"}
 
 
 class AuthenticatedUser(BaseModel):
@@ -86,7 +86,7 @@ async def get_current_user(
 
 
 def mfa_satisfied(user: AuthenticatedUser) -> bool:
-    """Verifiers and analysts need a TOTP-verified (aal2) session; the demo bypass skips it."""
+    """Reviewers and rule admins need a TOTP-verified (aal2) session; the demo bypass skips it."""
     if user.role not in MFA_ROLES or user.aal == "aal2":
         return True
     if settings.DEMO_MFA_BYPASS and (user.email or "").lower() not in settings.mfa_enforced_emails:
@@ -102,7 +102,7 @@ async def get_verified_user(user: AuthenticatedUser = Depends(get_current_user))
 
 
 def require_role(allowed_roles: List[str]):
-    """Only the listed roles pass. The administrator has no implicit access to anything."""
+    """Only the listed roles pass. No role has implicit access to anything."""
     def role_checker(user: AuthenticatedUser = Depends(get_verified_user)) -> AuthenticatedUser:
         if user.role not in allowed_roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Access denied for role: {user.role}")
