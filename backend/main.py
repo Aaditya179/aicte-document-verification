@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
 from core.security import AuthenticatedUser, MFA_ROLES, get_current_user, mfa_satisfied
-from routers import applications, auth, documents, findings, reference
+from routers import applications, auth, documents, findings, reference, workflow
 
 # Route handlers are plain `def`: supabase-py is blocking, and FastAPI runs a plain handler in a worker
 # thread, so one request's database calls do not hold up the others.
@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (auth, applications, documents, findings, reference):
+for module in (auth, applications, documents, findings, reference, workflow):
     app.include_router(module.router, prefix="/api/v1")
 
 

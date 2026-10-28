@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 from core.access import application_for
 from core.db import db, parallel
 from core.security import AuthenticatedUser, require_role
-from services import audit, casefile, reviews
+from core.clock import as_of_date
+from services import audit, casefile, priority as priority_service, reviews
 from services.validation import run_validation
 
 router = APIRouter(tags=["Findings"])
@@ -20,7 +21,7 @@ READERS = ["reviewer", "rule_admin"]
 # made to it. Validation runs are left out, since their details name findings it does not see.
 INSTITUTION_EVENTS = {"application_created", "application_seeded", "application_submitted", "document_upload_started",
                       "document_finalized", "document_processed", "document_processing_failed",
-                      "finding_request_evidence"}
+                      "finding_request_evidence", "evidence_request_fulfilled", "rooms_saved"}
 
 
 class FindingAction(BaseModel):
@@ -124,3 +125,74 @@ def audit_log(application_id: Optional[str] = None, limit: int = Query(100, ge=1
     for e in events:
         e["actor_name"] = names.get(e.get("actor_id")) or ("System" if not e.get("actor_id") else None)
     return events
+
+
+@router.get("/queue", tags=["Queue"])
+def review_queue(band: Optional[Literal["High", "Medium", "Low"]] = None, institution_id: Optional[str] = None,
+                 finding_type: Optional[str] = None, workflow_status: Optional[str] = None,
+                 user: AuthenticatedUser = Depends(require_role(READERS))):
+    """Submitted applications ordered by review priority (build spec 7.4), highest first, then the
+    earliest review deadline. Each row carries the score's composition."""
+    apps, institutions, findings, weights, runs, as_of = parallel(
+        lambda: db.table("applications").select("*").neq("workflow_status", "draft").execute().data or [],
+        lambda: db.table("institutions").select("id,code,name,city").execute().data or [],
+        lambda: db.table("findings").select("application_id,finding_type,status,is_cross_institution")
+                  .in_("status", list(casefile.UNRESOLVED_STATUSES)).execute().data or [],
+        lambda: {w["key"]: w["weight"] for w in db.fetch_all("priority_weights")},
+        lambda: db.table("validation_runs").select("application_id,started_at").eq("mode", "full").execute().data or [],
+        as_of_date,
+    )
+    institutions = {i["id"]: i for i in institutions}
+    by_app: dict[str, list[dict]] = {}
+    for f in findings:
+        by_app.setdefault(f["application_id"], []).append(f)
+    last_run: dict[str, str] = {}
+    for r in runs:
+        if (r.get("started_at") or "") >= last_run.get(r["application_id"], ""):
+            last_run[r["application_id"]] = r.get("started_at") or ""
+
+    rows = []
+    for a in apps:
+        open_ = by_app.get(a["id"], [])
+        score = priority_service.compute(open_, weights, a.get("review_deadline"), as_of)
+        types = sorted({f["finding_type"] for f in open_})
+        row = {
+            "application": {k: a.get(k) for k in ("id", "code", "category", "academic_year", "workflow_status",
+                                                   "submitted_at", "review_deadline")},
+            "institution": institutions.get(a["institution_id"], {}),
+            "priority": score, "finding_types": types,
+            "cross_flags": sum(1 for f in open_ if f["is_cross_institution"]),
+            "last_run_at": last_run.get(a["id"]),
+        }
+        if band and score["band"] != band:
+            continue
+        if institution_id and a["institution_id"] != institution_id:
+            continue
+        if finding_type and finding_type not in types:
+            continue
+        if workflow_status and a["workflow_status"] != workflow_status:
+            continue
+        rows.append(row)
+    rows.sort(key=lambda r: (-r["priority"]["score"], r["application"].get("review_deadline") or "9999", r["application"]["code"]))
+    return rows
+
+
+@router.get("/cross", tags=["Queue"])
+def cross_flags(user: AuthenticatedUser = Depends(require_role(READERS))):
+    """Every unresolved cross-institution flag with both applications. Titles carry masked IDs, not names
+    (build spec 8, privacy); names are on the case page."""
+    findings = (db.table("findings").select("id,finding_key,finding_type,title,status,application_id,related_application_id,created_at")
+                .eq("is_cross_institution", True).in_("status", list(casefile.UNRESOLVED_STATUSES)).execute().data or [])
+    if not findings:
+        return []
+    ids = list({f["application_id"] for f in findings} | {f["related_application_id"] for f in findings if f.get("related_application_id")})
+    apps, institutions = parallel(
+        lambda: db.table("applications").select("id,code,institution_id,workflow_status").in_("id", ids).execute().data or [],
+        lambda: db.table("institutions").select("id,code,name,city").execute().data or [],
+    )
+    institutions = {i["id"]: i for i in institutions}
+    apps = {a["id"]: {**a, "institution": institutions.get(a["institution_id"], {})} for a in apps}
+    out = [{**f, "application": apps.get(f["application_id"]), "related_application": apps.get(f.get("related_application_id"))}
+           for f in findings]
+    out.sort(key=lambda f: (f["finding_type"], f["finding_key"]))
+    return out

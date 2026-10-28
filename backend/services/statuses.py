@@ -22,11 +22,12 @@ def _status(key: str, label: str, value: str, tone: str, reasons: Optional[list[
 
 
 def compute(has_run: bool, findings: list[dict], documents: list[dict], fields: list[dict],
-            required_templates: set[tuple[str, str]], checks: list[dict]) -> dict:
+            required_templates: set[tuple[str, str]], checks: list[dict], rooms_entered: bool = True) -> dict:
     """
     findings: every finding of the application; documents: current documents; fields: their extracted
     fields (with doc_type added); required_templates: (doc_type, field_name) marked required;
-    checks: verification_checks rows of the current documents.
+    checks: verification_checks rows of the current documents; rooms_entered: whether the room table
+    for the floor-plan arithmetic (C11) has been entered.
     """
     if not has_run:
         names = (("integrity", "Integrity"), ("consistency", "Consistency"), ("authenticity", "Authenticity"), ("compliance", "Compliance"))
@@ -86,9 +87,11 @@ def compute(has_run: bool, findings: list[dict], documents: list[dict], fields: 
                            if t in uploaded_types and (t, n) not in present)
     if compliance_findings:
         compliance = _status("compliance", "Compliance", "Review required", "conflict", compliance_findings)
-    elif not_extracted:
-        compliance = _status("compliance", "Compliance", "Not assessable", "pending",
-                             [f"Could not be read: {', '.join(not_extracted)}"])
+    elif not_extracted or not rooms_entered:
+        reasons = [f"Could not be read: {', '.join(not_extracted)}"] if not_extracted else []
+        if not rooms_entered:
+            reasons.append("Room table not entered, so room areas cannot be added up")
+        compliance = _status("compliance", "Compliance", "Not assessable", "pending", reasons)
     else:
         compliance = _status("compliance", "Compliance", "Meets configured checks", "ok")
 

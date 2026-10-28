@@ -7,6 +7,8 @@ import { fetchApi } from '@/lib/api';
 import { uploadDocument, type UploadStep } from '@/lib/upload';
 import { PHOTO_CATEGORY_LABEL, type ApplicationDetail, type DocumentRow, type Reference } from '@/lib/types';
 import { Checklist, FileCover } from '@/components/FileCover';
+import { EvidenceRequests } from '@/components/requests';
+import { RoomTable } from '@/components/rooms';
 import { FileCheckTag, ReadingTag, isBeingRead, openDocument } from '@/components/documents';
 import { Empty, Loading, Notice, btnPrimary, btnQuiet, formatBytes, formatDateTime, input, label, td, th } from '@/components/ui';
 
@@ -180,11 +182,28 @@ function ApplicationPage() {
 
       <Checklist detail={detail} />
 
+      {detail.application.workflow_status !== 'draft' && (
+        <section aria-labelledby="requests" className="space-y-3">
+          <h2 id="requests" className="font-serif text-xl font-bold">Requests from reviewers</h2>
+          {detail.application.workflow_status === 'awaiting_institution' && (
+            <p className="text-sm text-ink-2">A reviewer needs more from you. Upload a replacement below if one is asked for, then answer each request.</p>
+          )}
+          <EvidenceRequests applicationId={id} documents={detail.documents} onAnswered={load}
+            docLabel={(d) => `${types[d.doc_type] ?? d.doc_type}${d.photo_category ? `, ${PHOTO_CATEGORY_LABEL[d.photo_category] ?? d.photo_category}` : ''}`} />
+        </section>
+      )}
+
       {editable ? (
         <UploadForm applicationId={id} reference={reference} onUploaded={load} />
       ) : (
-        <Notice kind="info">This application has been submitted, so its documents can no longer be changed.</Notice>
+        <Notice kind="info">This application is with the reviewers, so its documents can no longer be changed unless a reviewer asks for more.</Notice>
       )}
+
+      <section aria-labelledby="rooms" className="space-y-3">
+        <h2 id="rooms" className="font-serif text-xl font-bold">Room table</h2>
+        <p className="text-sm text-ink-2">Each room on the floor plan with its length and width. Their areas should add up to the declared built-up area.</p>
+        <RoomTable applicationId={id} canEdit={editable} />
+      </section>
 
       <section aria-labelledby="documents">
         <h2 id="documents" className="mb-3 font-serif text-xl font-bold">Documents</h2>

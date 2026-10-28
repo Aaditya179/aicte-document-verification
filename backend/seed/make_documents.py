@@ -59,6 +59,9 @@ class AppSpec:
     photo_categories: tuple = ("lab", "classroom", "library")
     skip: set = field(default_factory=set)     # document types left out
     duplicate_of: dict = field(default_factory=dict)  # doc_type -> photo category whose file it reuses
+    photo_dates: dict = field(default_factory=dict)   # photo category -> when it was taken, if not photo_taken
+    photo_copy: dict = field(default_factory=dict)    # photo category -> (AppSpec, category) re-saved from another application
+    rooms_scale: float = 1.0                   # room table total as a share of the declared area
 
 
 def _pdf(title: str, lines: list[str]) -> bytes:
@@ -148,8 +151,23 @@ def floor_plan(s: AppSpec) -> bytes:
                                          "Ground floor: labs and library", "First floor: classrooms"])
 
 
+def _exif(taken: datetime) -> bytes:
+    exif = Image.Exif()
+    exif[0x8769] = {36867: taken.strftime("%Y:%m:%d %H:%M:%S")}
+    return exif.tobytes()
+
+
 def photo(s: AppSpec, category: str) -> bytes:
-    """A synthetic room photo. The seed depends on the application and category, so every photo differs."""
+    """A synthetic room photo. The seed depends on the application and category, so every photo differs.
+    A photo copied from another application is that photo resized and re-saved at a lower quality, with
+    this application's date, which leaves the bytes different and the visual fingerprint close."""
+    taken = s.photo_dates.get(category, s.photo_taken)
+    if category in s.photo_copy:
+        source, source_category = s.photo_copy[category]
+        img = Image.open(io.BytesIO(photo(source, source_category))).convert("RGB").resize((1000, 667))
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=70, exif=_exif(taken))
+        return buf.getvalue()
     rng = random.Random(f"{s.seq}-{category}")
     img = Image.new("RGB", (1200, 800), tuple(rng.randint(150, 235) for _ in range(3)))
     d = ImageDraw.Draw(img)
@@ -159,11 +177,21 @@ def photo(s: AppSpec, category: str) -> bytes:
         w, h = rng.randint(60, 320), rng.randint(40, 260)
         shape = d.rectangle if rng.random() < 0.7 else d.ellipse
         shape([x, y, x + w, y + h], fill=tuple(rng.randint(0, 255) for _ in range(3)))
-    exif = Image.Exif()
-    exif[0x8769] = {36867: s.photo_taken.strftime("%Y:%m:%d %H:%M:%S")}
     buf = io.BytesIO()
-    img.save(buf, "JPEG", quality=85, exif=exif.tobytes())
+    img.save(buf, "JPEG", quality=85, exif=_exif(taken))
     return buf.getvalue()
+
+
+def rooms(s: AppSpec) -> list[dict]:
+    """The room table read off the floor plan. Rooms add up to the declared area times rooms_scale; the
+    last row takes the remainder at a width of 20 m, so the sum is exact."""
+    fixed = [("Lab 1", 20, 15), ("Lab 2", 20, 15), ("Classroom 1", 12, 10), ("Classroom 2", 12, 10),
+             ("Classroom 3", 12, 10), ("Classroom 4", 12, 10), ("Library", 25, 20)]
+    total = round(s.declared_area_sqm * s.rooms_scale, 2)
+    rest = total - sum(l * w for _, l, w in fixed)
+    rows = [{"room_label": n, "length_m": l, "width_m": w} for n, l, w in fixed]
+    rows.append({"room_label": "Corridors, staff rooms and services", "length_m": round(rest / 20, 4), "width_m": 20})
+    return rows
 
 
 PDF_BUILDERS = {

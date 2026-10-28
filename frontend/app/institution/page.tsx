@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
 import { CATEGORY_LABEL, WORKFLOW_LABEL, type Application, type ApplicationRow } from '@/lib/types';
+import { EvidenceRequests } from '@/components/requests';
 import { Empty, FileNumber, Loading, Notice, PageShell, Tag, btnPrimary, btnSecondary, formatDate, input, label, td, th } from '@/components/ui';
 
 function NewApplication({ onCreated }: { onCreated: (a: Application) => void }) {
@@ -108,6 +109,13 @@ export default function InstitutionHome() {
             </tbody>
           </table>
         </div>
+      )}
+      {rows && rows.some((a) => a.workflow_status !== 'draft') && (
+        <section aria-labelledby="requests" className="mt-10 space-y-3">
+          <h2 id="requests" className="font-serif text-xl font-bold">Requests from reviewers</h2>
+          <p className="text-sm text-ink-2">Open requests first, with their due dates. Answer each one from its application.</p>
+          <EvidenceRequests showApplication />
+        </section>
       )}
     </PageShell>
   );

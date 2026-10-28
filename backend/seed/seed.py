@@ -13,8 +13,10 @@ Every document goes through the real pipeline (file check, then reading), so the
 (scripts/evaluate.py) measures extraction and checks together. The as-of date is fixed at AS_OF in
 proofpath.settings, so dates in the documents give the same findings on any day.
 
-Phase 2 covers the within-application scenarios (checks C1 to C6). Cross-institution and
-infrastructure scenarios join in phase 3.
+Phase 2 added the within-application scenarios (checks C1 to C6) and 21 clean applications. Phase 3
+adds eleven applications at new institutions for checks C7 to C12, among them a look-alike that must
+not be flagged, and a room table for every seeded application. Rerunning adds only what is missing,
+so the phase 2 applications and the reviewer actions on them stay.
 """
 import argparse
 import hashlib
@@ -51,6 +53,17 @@ INSTITUTIONS = [
     ("INST-2013", "Betwa Institute of Pharmacy", "Jhansi"),
     ("INST-2014", "Sutlej College of Architecture", "Ludhiana"),
     ("INST-2015", "Tungabhadra Engineering College", "Hospet"),
+    # Phase 3 scenarios
+    ("INST-2016", "Ganga Institute of Technology", "Varanasi"),
+    ("INST-2017", "Yamuna College of Engineering", "Agra"),
+    ("INST-2018", "Kosi Institute of Engineering", "Purnia"),
+    ("INST-2019", "Periyar College of Technology", "Erode"),
+    ("INST-2020", "Kaveri Delta Institute of Technology", "Thanjavur"),
+    ("INST-2021", "Mandovi Institute of Engineering", "Panaji"),
+    ("INST-2022", "Zuari College of Technology", "Margao"),
+    ("INST-2023", "Sharavati Institute of Technology", "Shivamogga"),
+    ("INST-2024", "Indravati Engineering College", "Jagdalpur"),
+    ("INST-2025", "Subarnarekha Institute of Technology", "Jamshedpur"),
 ]
 
 # Distinct given names and surnames; each person in the dataset gets a unique pair
@@ -124,10 +137,56 @@ def scenarios() -> list[tuple[str, str, AppSpec, list[str]]]:
         replace(clean_spec(8, inst["INST-2008"]), noc_issue="1 May 2027", noc_expiry="1 January 2027"),
         ["DATE_ORDER_INVALID|{code}|fire_noc"])
 
+    # Phase 3: two institutions list the same faculty member, the second with a middle initial and a
+    # mistyped ID, over overlapping periods. A third lists a different person of the same name with a
+    # different qualification: the look-alike, which must not be flagged.
+    rohini = Person("F-005", "Dr. Rohini Deshpande", "Professor", "PhD", "XXXX-XXXX-7001", date(2021, 7, 1))
+    ghost_a = clean_spec(30, inst["INST-2016"])
+    ghost_a = replace(ghost_a, faculty=ghost_a.faculty + [rohini])
+    ghost_b = clean_spec(31, inst["INST-2017"])
+    ghost_b = replace(ghost_b, faculty=ghost_b.faculty + [replace(rohini, name="Rohini S. Deshpande", masked_id="XXXX-XXXX-7010",
+                                                                  start=date(2023, 7, 1))])
+    look = clean_spec(32, inst["INST-2018"])
+    look = replace(look, faculty=look.faculty + [replace(rohini, name="Rohini Deshpande", designation="Assistant Professor",
+                                                         qualification="M.Tech", masked_id="XXXX-XXXX-7020", start=date(2022, 7, 1))])
+    code_a, code_b = app_code(ghost_a), app_code(ghost_b)
+    add("ghost_faculty", f"Dr. Rohini Deshpande (PhD) also listed by {code_b} as Rohini S. Deshpande (PhD), periods overlapping",
+        ghost_a, [f"GHOST_FACULTY|{{code}}|{code_b}|F-005"])
+    add("ghost_faculty", f"Rohini S. Deshpande (PhD) also listed by {code_a} as Dr. Rohini Deshpande (PhD), periods overlapping",
+        ghost_b, [f"GHOST_FACULTY|{{code}}|{code_a}|F-005"])
+    add("lookalike", "Rohini Deshpande with an M.Tech and another ID: same name, different qualification, not the same person",
+        look, [])
+
+    # The second institution's lab photo is the first one's, resized and re-saved
+    photo_a = clean_spec(33, inst["INST-2019"])
+    photo_b = replace(clean_spec(34, inst["INST-2020"]), photo_copy={"lab": (photo_a, "lab")})
+    add("photo_reuse", f"Its lab photo appears, resized and re-saved, in {app_code(photo_b)}", photo_a,
+        [f"PHOTO_REUSE|{{code}}|{app_code(photo_b)}"])
+    add("photo_reuse", f"Its lab photo is {app_code(photo_a)}'s, resized to 1000 x 667 and re-saved at quality 70", photo_b,
+        [f"PHOTO_REUSE|{{code}}|{app_code(photo_a)}"])
+
+    # Two new institutions give the same land survey number (ASSUMPTIONS.md A1)
+    land_a = clean_spec(35, inst["INST-2021"], "new_institution")
+    land_b = replace(clean_spec(36, inst["INST-2022"], "new_institution"), survey_no=land_a.survey_no)
+    add("reused_identifier", f"Survey number {land_a.survey_no} also given by {app_code(land_b)}", land_a,
+        [f"REUSED_IDENTIFIER|{{code}}|{app_code(land_b)}|survey_no"])
+    add("reused_identifier", f"Survey number {land_a.survey_no} also given by {app_code(land_a)}", land_b,
+        [f"REUSED_IDENTIFIER|{{code}}|{app_code(land_a)}|survey_no"])
+
+    add("area_mismatch", "Rooms in the room table add up to 92% of the declared built-up area (tolerance 1%)",
+        replace(clean_spec(37, inst["INST-2023"]), rooms_scale=0.92), ["AREA_MISMATCH|{code}|total"])
+    add("stale_photo", "Lab photo taken on 15/06/2025, more than 12 months before the as-of date",
+        replace(clean_spec(38, inst["INST-2024"]), photo_dates={"lab": datetime(2025, 6, 15, 10, 30)}),
+        ["PHOTO_METADATA|{code}|lab"])
+    add("infra_evidence_missing", "Lab and classroom photos only; no library photo",
+        replace(clean_spec(39, inst["INST-2025"]), photo_categories=("lab", "classroom")),
+        ["INFRA_EVIDENCE_MISSING|{code}|library"])
+
     # Clean applications, half of them new institutions: none may be flagged. An institution's second
     # application takes the other academic year, so every application code is unique.
     used = {app_code(spec) for _, _, spec, _ in out}
-    fillers = INSTITUTIONS[9:] + INSTITUTIONS[1:9] + INSTITUTIONS[9:]
+    base = INSTITUTIONS[:16]                   # the phase 2 institutions, so the fillers never change
+    fillers = base[9:] + base[1:9] + base[9:]
     for k, inst_row in enumerate(fillers[:21]):
         seq = 9 + k
         category = "new_institution" if k % 2 else "extension_of_approval"
@@ -176,9 +235,21 @@ def _upload(application: dict, doc_type: str, filename: str, mime: str, data: by
         pipeline.process_document(document_id)
 
 
+def add_rooms(spec: AppSpec, application_id: str) -> bool:
+    """The room table for the floor-plan arithmetic (C11), added only if the application has none."""
+    if db.fetch_all("rooms", application_id=application_id):
+        return False
+    plan = db.fetch_one("documents", application_id=application_id, doc_type="floor_plan", status="current")
+    db.table("rooms").insert([{**r, "application_id": application_id, "floor_plan_document_id": plan["id"] if plan else None}
+                              for r in mk.rooms(spec)]).execute()
+    return True
+
+
 def build(spec: AppSpec, institution_id: str, deadline: date) -> tuple[str, bool]:
     code = app_code(spec)
-    if db.fetch_one("applications", code=code):
+    existing = db.fetch_one("applications", code=code)
+    if existing:
+        add_rooms(spec, existing["id"])
         return code, False
     application = db.insert("applications", {
         "code": code, "institution_id": institution_id, "category": spec.category, "academic_year": spec.academic_year,
@@ -191,6 +262,7 @@ def build(spec: AppSpec, institution_id: str, deadline: date) -> tuple[str, bool
         folder.mkdir(parents=True, exist_ok=True)
         (folder / filename).write_bytes(data)
         _upload(application, doc_type, filename, mime, data, category)
+    add_rooms(spec, application["id"])
     audit.record(None, "application_seeded", "application", application["id"], application["id"], {"code": code, "synthetic": True})
     return code, True
 
@@ -208,6 +280,7 @@ def ground_truth(rows) -> dict:
         "note": "Synthetic dataset. Every institution, person and document is fictional; rules are illustrative.",
         "as_of": AS_OF.isoformat(),
         "clean_control": next(c for c, a in apps.items() if a["scenario"] == "clean_control"),
+        "must_not_flag": sorted(c for c, a in apps.items() if a["scenario"] in ("clean_control", "lookalike")),
         "applications": apps,
     }
 
@@ -257,6 +330,15 @@ def run() -> None:
         results = list(pool.map(one, rows))
     made = sum(1 for _, new in results if new)
     print(f"As-of date fixed at {AS_OF:%d/%m/%Y}. {made} applications created, {len(results) - made} already present.")
+    incomplete = []
+    for _, _, spec, _ in rows:
+        app = db.fetch_one("applications", code=app_code(spec))
+        docs = db.table("documents").select("processing_status").eq("application_id", app["id"]).execute().data or []
+        if len(docs) < len(documents_for(spec)) or any(d["processing_status"] != "done" for d in docs):
+            incomplete.append(app_code(spec))
+    if incomplete:
+        print(f"Incomplete (an upload or reading was interrupted): {', '.join(incomplete)}. "
+              "Delete these applications and run the seed again.")
     print(f"Ground truth written to {GROUND_TRUTH}")
 
 

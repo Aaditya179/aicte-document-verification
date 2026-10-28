@@ -11,7 +11,8 @@ import {
 } from '@/lib/types';
 import { Checklist, FileCover } from '@/components/FileCover';
 import { FileCheckTag, ReadingTag, documentLink, isBeingRead } from '@/components/documents';
-import { AuditTrail, CitedPage, FindingCard, PriorityLedger, StatusCards, type Citation } from '@/components/findings';
+import { AuditTrail, CitedPage, FieldReview, FindingCard, PriorityLedger, StatusCards, type Citation } from '@/components/findings';
+import { RoomTable } from '@/components/rooms';
 import { Empty, Loading, Mark, Notice, Tag, btnPrimary, btnQuiet, formatDate, formatDateTime, td, th, useMe } from '@/components/ui';
 
 type View = { url: string; mime: string; page: number | null };
@@ -24,7 +25,14 @@ function howRead(f: ExtractedField) {
 }
 
 /** The values read from one document. A highlighted value opens the page it was read from. */
-function Values({ fields, faculty, onPage }: { fields: ExtractedField[]; faculty: FacultyRow[]; onPage: (page: number) => void }) {
+function Values({ fields, faculty, onPage, canAct, onReviewed }: {
+  fields: ExtractedField[];
+  faculty: FacultyRow[];
+  onPage: (page: number) => void;
+  canAct: boolean;
+  onReviewed: (f: ExtractedField) => void;
+}) {
+  const [checking, setChecking] = useState<string | null>(null);
   if (fields.length === 0 && faculty.length === 0) {
     return <Empty>No values are read from this kind of document.</Empty>;
   }
@@ -40,6 +48,7 @@ function Values({ fields, faculty, onPage }: { fields: ExtractedField[]; faculty
                 <th className={th}>Page</th>
                 <th className={th}>How it was read</th>
                 <th className={th}>State</th>
+                {canAct && <th className={th}><span className="sr-only">Check</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -61,8 +70,24 @@ function Values({ fields, faculty, onPage }: { fields: ExtractedField[]; faculty
                       : <Tag>Read</Tag>}
                     {f.review_reason && <p className="mt-1 max-w-64 text-xs text-ink-2">{f.review_reason}</p>}
                   </td>
+                  {canAct && (
+                    <td className={td}>
+                      <button className={btnQuiet} aria-expanded={checking === f.id} onClick={() => setChecking(checking === f.id ? null : f.id)}>
+                        {checking === f.id ? 'Close' : 'Check value'}
+                      </button>
+                    </td>
+                  )}
                 </tr>
-              ))}
+              )).flatMap((row, i) => {
+                const f = fields[i];
+                return checking === f.id ? [row, (
+                  <tr key={`${f.id}-check`}>
+                    <td colSpan={6} className="border-b border-rule px-3 py-3">
+                      <FieldReview field={f} onDone={(updated) => { setChecking(null); onReviewed(updated); }} />
+                    </td>
+                  </tr>
+                )] : [row];
+              })}
             </tbody>
           </table>
         </div>
@@ -126,6 +151,7 @@ function FindingGroup({ title, id, findings, empty, onChange, ...card }: {
   docLabel: (t: string) => string;
   onCite: (c: Citation) => void;
   onChange: (f: Finding) => void;
+  onReviewed: () => void;
   canAct: boolean;
 }) {
   const [showClosed, setShowClosed] = useState(false);
@@ -206,6 +232,11 @@ function ReviewApplication() {
     setReview((v) => v + 1);
   };
 
+  const reviewed = () => {
+    setRunNote({ kind: 'success', text: 'Value recorded and the application validated again.' });
+    setReview((v) => v + 1);
+  };
+
   const cite = (c: Citation) => {
     setCitation(c);
     // On a narrow screen the viewer sits below the findings
@@ -250,7 +281,7 @@ function ReviewApplication() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-10 px-4 py-8 sm:px-6">
       <div>
-        <Link href="/review" className={btnQuiet}>Applications</Link>
+        <Link href="/review" className={btnQuiet}>Review queue</Link>
         <div className="mt-4">
           <FileCover detail={detail}>
             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
@@ -288,9 +319,9 @@ function ReviewApplication() {
           ) : (
             <>
               <FindingGroup id="within" title="Within this application" empty="Nothing unresolved within this application."
-                findings={findings.filter((f) => !f.is_cross_institution)} docLabel={docLabel} onCite={cite} onChange={onChange} canAct={canAct} />
-              <FindingGroup id="across" title="Across institutions" empty="No flags across institutions. These checks are not part of this build yet."
-                findings={findings.filter((f) => f.is_cross_institution)} docLabel={docLabel} onCite={cite} onChange={onChange} canAct={canAct} />
+                findings={findings.filter((f) => !f.is_cross_institution)} docLabel={docLabel} onCite={cite} onChange={onChange} onReviewed={reviewed} canAct={canAct} />
+              <FindingGroup id="across" title="Across institutions" empty="No flags across institutions."
+                findings={findings.filter((f) => f.is_cross_institution)} docLabel={docLabel} onCite={cite} onChange={onChange} onReviewed={reviewed} canAct={canAct} />
             </>
           )}
         </div>
@@ -315,6 +346,12 @@ function ReviewApplication() {
       </section>
 
       <Checklist detail={detail} />
+
+      <section aria-labelledby="rooms" className="space-y-3">
+        <h2 id="rooms" className="font-serif text-xl font-bold">Room table</h2>
+        <p className="text-sm text-ink-2">Rooms read off the floor plan. Their total is set against the declared built-up area when validation runs.</p>
+        <RoomTable applicationId={id} canEdit={canAct} />
+      </section>
 
       <section aria-labelledby="documents" className="grid gap-8 lg:grid-cols-[20rem_1fr]">
         <div>
@@ -394,7 +431,13 @@ function ReviewApplication() {
                 <div>
                   <h3 className="mb-3 font-serif text-lg font-bold">Values read from this document</h3>
                   {selected.processing_status === 'error' && <Notice kind="warning">{selected.processing_note}</Notice>}
-                  {!values ? <Loading what="Loading values" /> : <Values {...values} onPage={(page) => show(selected, page)} />}
+                  {!values ? <Loading what="Loading values" /> : (
+                    <Values {...values} onPage={(page) => show(selected, page)} canAct={canAct}
+                      onReviewed={(f) => {
+                        setValues((v) => v && { ...v, fields: v.fields.map((x) => (x.id === f.id ? f : x)) });
+                        reviewed();
+                      }} />
+                  )}
                 </div>
               )}
             </div>

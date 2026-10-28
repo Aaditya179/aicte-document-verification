@@ -84,6 +84,10 @@ def main() -> int:
                   f"including the clean control {truth['clean_control']}."]
     for code, keys in flagged_clean:
         lines.append(f"  Flagged: {code}: {', '.join(keys)}")
+    for code in truth.get("must_not_flag", []):
+        scenario = truth["applications"][code]["scenario"].replace("_", " ")
+        flagged = next((k for c, k in flagged_clean if c == code), None)
+        lines.append(f"  {code} ({scenario}): {'FLAGGED ' + ', '.join(flagged) if flagged else 'not flagged'}")
     for label, keys in (("False positive", fp), ("False negative", fn)):
         for key in sorted(keys):
             lines.append(f"  {label}: {key}")

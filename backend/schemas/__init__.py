@@ -18,3 +18,28 @@ class UploadInit(BaseModel):
     # Photos only: what the photo shows
     category: Optional[Literal["lab", "classroom", "library", "other"]] = None
 
+
+
+class Room(BaseModel):
+    room_label: str = Field(..., min_length=1, max_length=80)
+    length_m: float = Field(..., gt=0, lt=1000)
+    width_m: float = Field(..., gt=0, lt=1000)
+
+
+class RoomTable(BaseModel):
+    rooms: list[Room] = Field(..., max_length=300)
+    floor_plan_document_id: Optional[str] = None
+
+
+class FieldConfirm(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=2000)
+
+
+class FieldCorrect(BaseModel):
+    value: str = Field(..., min_length=1, max_length=200)
+    reason: str = Field(..., min_length=3, max_length=2000)
+
+
+class Fulfil(BaseModel):
+    note: str = Field(..., min_length=3, max_length=2000)
+    document_id: Optional[str] = None

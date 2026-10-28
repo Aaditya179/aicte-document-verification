@@ -16,6 +16,8 @@ DISCLAIMERS = [
 ]
 FINAL_DECISION = "Final decision: Pending (authorised AICTE official)"
 
+UNRESOLVED_STATUSES = ("open", "evidence_requested")
+
 ACTION_LABEL = {
     "resolve": "Resolved", "dismiss": "Dismissed", "request_evidence": "Asked the institution for evidence",
     "confirm_field": "Confirmed a value", "correct_field": "Corrected a value",
@@ -76,17 +78,18 @@ def status_view(application: dict, findings: Optional[list[dict]] = None) -> dic
                                       lambda: _in("verification_checks", "document_id", ids))
         return docs, field_rows, checks
 
-    run, found, (documents, field_rows, checks), templates = parallel(
+    run, found, (documents, field_rows, checks), templates, rooms = parallel(
         lambda: latest_run(application["id"]),
         lambda: findings if findings is not None else db.fetch_all("findings", application_id=application["id"]),
         documents_and_children,
         lambda: db.table("extraction_templates").select("doc_type,field_name").eq("required", True).execute().data or [],
+        lambda: db.table("rooms").select("id").eq("application_id", application["id"]).limit(1).execute().data or [],
     )
     findings = found
     doc_type = {d["id"]: d["doc_type"] for d in documents}
     fields = [{**f, "doc_type": doc_type[f["document_id"]]} for f in field_rows]
     required = {(t["doc_type"], t["field_name"]) for t in templates}
-    return {**statuses.compute(run is not None, findings, documents, fields, required, checks),
+    return {**statuses.compute(run is not None, findings, documents, fields, required, checks, bool(rooms)),
             "last_run": {k: run.get(k) for k in ("id", "started_at", "as_of_date", "rule_versions", "summary")} if run else None}
 
 

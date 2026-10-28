@@ -25,7 +25,7 @@ ProofPath was started on 2026-10-28 from **Nirikshan** (SIH26262, AICTE approval
 
 ## Status
 
-**Phases 0 (setup), 1 (foundation) and 2 (core validation) done on 28/10/2026.** Phase 2 is not yet committed; the user verifies and pushes. The next step is phase 3 (C7 to C9 across institutions, rooms and C10 to C12, the needs-confirmation flow, priority queue, notifications, evidence requests on the institution side, document versions with auto-close).
+**Phases 0 to 3 done on 28/10/2026.** Phases 2 and 3 are not yet committed; the user verifies and pushes. Migration `0004_phase3.sql` is written but not yet applied in the SQL editor (its data is already live, written through the API). The next step is phase 4 (MANUAL and REGISTRY (mock) checks, the authenticity status, the pre-flight wizard).
 
 Phase 1 built:
 - Migrations `0001_proofpath_schema.sql` (spec tables in the `proofpath` schema, audit functions `audit_append`, `audit_verify`, `rule_ver`), `0002_rls.sql` (lockdown), `0003_seed_reference.sql` (categories, document types, checklists, extraction templates, comparison pairs, the 14 illustrative rules, priority weights). Applied on 28/10/2026; `proofpath` is an exposed schema.
@@ -36,9 +36,17 @@ Phase 1 built:
 Phase 2 built:
 - `services/validation.py` (checks C1 to C6, modes full, preflight and dry_run, stable finding keys, auto-close), `statuses.py` (the four statuses), `priority.py` (score with its composition), `reviews.py` (resolve, dismiss, request evidence, each with a reason), `casefile.py`. Routes in `routers/findings.py`: validate, statuses, priority, findings, actions, Case File and snapshots, `/audit`.
 - Frontend: the case page `/review/[id]` (status cards, Run validation, findings within and across institutions with A and B side by side, cited page viewer, priority ledger, actions, audit trail with chain check) and the printable `/review/[id]/casefile` with Save snapshot. Components in `components/findings.tsx`.
-- Seed: `seed/seed.py` (16 institutions, 30 applications, 8 scenarios, `ground_truth.json`, as-of 01/11/2026), ran live. `scripts/evaluate.py` gives 8 true positives, 0 false positives, 0 false negatives, and 22 of 22 clean applications unflagged.
+- Seed: `seed/seed.py` (16 institutions, 30 applications, 8 scenarios, `ground_truth.json`, as-of 01/11/2026), ran live. `scripts/evaluate.py` gave 8 true positives, 0 false positives, 0 false negatives.
 - Speed: `core/db.py` keeps one pooled HTTP/1.1 PostgREST client (`client.schema()` used to open a new connection per query) and `parallel()` runs independent queries at once; sign-ins are cached for 30 seconds; route handlers are plain `def`. One Supabase round trip is about 0.2s, so keep sequential queries few.
 - Tests: `tests/test_validation.py`, `tests/test_review_flow.py` (71 tests in all).
+
+Phase 3 built:
+- `services/crossinst.py` (C7 reused identifiers, C8 faculty listed elsewhere, C9 photo reuse; reviewers only, drafts and the same institution excluded) and C10 to C12 in `validation.py`. R-GHOST-01 version 2 (similarity 0.9, `0004_phase3.sql`, ASSUMPTIONS A20).
+- `routers/workflow.py`: room table, `POST /fields/{id}/confirm` and `/correct` (original kept, validation reruns), evidence requests and `/fulfil`, notifications. `GET /queue` and `GET /cross` in `routers/findings.py`. A document read into a validated application starts a system run (`pipeline.revalidate_after_replacement`).
+- Frontend: `/review` is the priority queue (filters, the sum behind each score), `/review/cross`, notification panel in the navbar (polled), value checks inside findings and in the document explorer, photos side by side, room table (`components/rooms.tsx`), evidence requests on the institution pages (`components/requests.tsx`).
+- Seed: 10 more applications at INST-2016 to INST-2025 (shared faculty pair, look-alike, photo reuse pair, reused survey number pair, area mismatch, stale photo, missing library photo) and room tables for all. Live evaluation over 40 applications: 17 true positives, 0 false positives, 0 false negatives; clean control and look-alike not flagged.
+- `core/db.py` resends reads, updates and deletes once after a dropped connection or a gateway 502 (never inserts). The seed reports applications left incomplete by an interrupted upload.
+- Tests: `tests/test_phase3.py` (97 tests in all).
 
 ## Roles
 
@@ -60,7 +68,7 @@ cd backend && PYTHONPATH=. .venv/bin/uvicorn main:app --reload --port 8001
 PYTHONPATH=. .venv/bin/pytest -q
 PYTHONPATH=. .venv/bin/python -m seed.demo     # needs migrations 0001-0003 applied first
 PYTHONPATH=. .venv/bin/python -m seed.samples  # synthetic files to upload by hand
-PYTHONPATH=. .venv/bin/python -m seed.seed     # the 30-application dataset; --reset is a dry run without --yes
+PYTHONPATH=. .venv/bin/python -m seed.seed     # the 40-application dataset; --reset is a dry run without --yes
 PYTHONPATH=. .venv/bin/python -m scripts.evaluate  # with the API running: scores against seed/ground_truth.json
 
 # Frontend (port 3001)

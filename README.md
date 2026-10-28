@@ -44,6 +44,7 @@ In the Supabase dashboard, open the **SQL editor** and run, in order:
 1. `supabase/migrations/0001_proofpath_schema.sql`: the `proofpath` schema, its tables, the audit hash chain and the `proofpath-documents` bucket. Nothing in `public` changes.
 2. `supabase/migrations/0002_rls.sql`: locks the schema to the API. It stops with an error if anything is still open to a browser role.
 3. `supabase/migrations/0003_seed_reference.sql`: categories, document types, checklists, extraction templates and the illustrative rules.
+4. `supabase/migrations/0004_phase3.sql`: version 2 of the faculty-matching rule (ASSUMPTIONS.md A20).
 
 Then go to **Project Settings → Data API → Exposed schemas**, add `proofpath` and save.
 
@@ -55,7 +56,7 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cp .env.example .env                           # Same SUPABASE_* values as Nirikshan
 PYTHONPATH=. .venv/bin/python -m seed.demo     # Demo accounts, 2 institutions, 2 draft applications
 PYTHONPATH=. .venv/bin/python -m seed.samples  # Synthetic files to upload, in seed/samples/
-PYTHONPATH=. .venv/bin/python -m seed.seed     # 30 applications from 16 fictional institutions (spec 14)
+PYTHONPATH=. .venv/bin/python -m seed.seed     # 40 applications from 26 fictional institutions (spec 14)
 PYTHONPATH=. .venv/bin/uvicorn main:app --reload --port 8001
 ```
 
@@ -103,14 +104,14 @@ proofpath-ai/
 │   └── lib/                 API client, upload flow, Supabase client, types
 ├── backend/                 FastAPI
 │   ├── core/                settings, schema-bound database, roles, access rules, as-of date, rate limits
-│   ├── routers/             auth, applications, documents, findings, reference
-│   ├── services/            pipeline, extraction, normalise, validation, statuses, priority,
+│   ├── routers/             auth, applications, documents, findings, reference, workflow
+│   ├── services/            pipeline, extraction, normalise, validation, crossinst, statuses, priority,
 │   │                        reviews, casefile, audit, llm (Groq)
 │   ├── scripts/             evaluate (ground-truth scoring)
 │   ├── schemas/             request bodies
-│   ├── seed/                demo accounts, sample files, the 30-application dataset
+│   ├── seed/                demo accounts, sample files, the 40-application dataset
 │   └── tests/
-├── supabase/migrations/     0001 schema, 0002 lockdown, 0003 reference data
+├── supabase/migrations/     0001 schema, 0002 lockdown, 0003 reference data, 0004 phase 3 rule
 ├── design/                  the design tokens
 └── ASSUMPTIONS.md
 ```

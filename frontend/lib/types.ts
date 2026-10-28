@@ -193,6 +193,7 @@ export interface EvidenceRequest {
   message: string | null;
   due_date: string | null;
   status: 'open' | 'fulfilled' | 'cancelled';
+  fulfilled_by_document_id?: string | null;
   created_at: string;
 }
 
@@ -305,4 +306,82 @@ export const FINDING_STATUS_LABEL: Record<FindingStatus, string> = {
 
 export const SEVERITY_LABEL: Record<string, string> = {
   info: 'Information', low: 'Low', medium: 'Medium', high: 'High',
+};
+
+// Queue, cross-institution flags, rooms, notifications and evidence requests (phase 3)
+
+export interface QueueRow {
+  application: Pick<Application, 'id' | 'code' | 'category' | 'academic_year' | 'workflow_status' | 'submitted_at' | 'review_deadline'>;
+  institution: InstitutionRef & { id: string };
+  priority: Priority;
+  finding_types: string[];
+  cross_flags: number;
+  last_run_at: string | null;
+}
+
+export interface CrossApplication {
+  id: string;
+  code: string;
+  workflow_status: WorkflowStatus;
+  institution: InstitutionRef;
+}
+
+export interface CrossFlag {
+  id: string;
+  finding_key: string;
+  finding_type: 'REUSED_IDENTIFIER' | 'GHOST_FACULTY' | 'PHOTO_REUSE';
+  title: string;
+  status: FindingStatus;
+  created_at: string;
+  application: CrossApplication | null;
+  related_application: CrossApplication | null;
+}
+
+export interface Room {
+  id?: string;
+  room_label: string;
+  length_m: number;
+  width_m: number;
+  area_sqm?: number;
+}
+
+export interface RoomView {
+  rooms: Room[];
+  total_sqm: number;
+  declared_total_area_sqm: number | null;
+}
+
+export interface AppNotification {
+  id: string;
+  kind: string;
+  ref_type: string | null;
+  ref_id: string | null;
+  message: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface EvidenceRequestRow extends EvidenceRequest {
+  finding_id: string;
+  application_id: string;
+  finding: { id: string; title: string; finding_type: string; status: FindingStatus };
+  application: { id: string; code: string; workflow_status: WorkflowStatus };
+}
+
+export const FINDING_TYPE_LABEL: Record<string, string> = {
+  MISSING_DOCUMENT: 'Missing document',
+  EXPIRED_DOCUMENT: 'Expired document',
+  DATE_ORDER_INVALID: 'Dates out of order',
+  DATE_CONFLICT: 'Date conflict',
+  ID_MISMATCH: 'ID mismatch',
+  COUNT_CONFLICT: 'Count conflict',
+  FIELD_NEEDS_CONFIRMATION: 'Value needs confirmation',
+  DUPLICATE_FILE: 'Duplicate file',
+  REUSED_IDENTIFIER: 'Identifier in another application',
+  GHOST_FACULTY: 'Faculty listed elsewhere',
+  PHOTO_REUSE: 'Photo matches another application',
+  INFRA_EVIDENCE_MISSING: 'Infrastructure evidence missing',
+  AREA_MISMATCH: 'Area mismatch',
+  AREA_BELOW_MINIMUM: 'Area below minimum',
+  PHOTO_METADATA: 'Photo date',
 };

@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { fetchApi } from '@/lib/api';
 import {
   FINDING_STATUS_LABEL, SEVERITY_LABEL, humanize,
-  type AuditEvent, type Finding, type FindingEvidence, type Priority, type ReviewActionKind, type StatusCard,
+  type AuditEvent, type ExtractedField, type Finding, type FindingEvidence, type Priority, type ReviewActionKind, type StatusCard,
 } from '@/lib/types';
 import { documentLink } from './documents';
-import { Empty, Loading, Mark, Notice, Tag, btnQuiet, btnSecondary, formatDate, formatDateTime, input, label, sheet, td, th } from './ui';
+import { Empty, Loading, Mark, Notice, Tag, btnQuiet, btnSecondary, formatDate, formatDateInWords, formatDateTime, input, label, sheet, td, th } from './ui';
 
 // Green ink is kept for what a person did, so a passed status is written in plain ink
 const STATUS_TONE = {
@@ -133,17 +134,52 @@ function EvidenceCell({ ev, docLabel, onCite }: { ev: FindingEvidence; docLabel:
   );
 }
 
+/** A photo cited as evidence, shown in place (links are short-lived, so each one is fetched fresh). */
+function EvidencePhoto({ ev }: { ev: FindingEvidence }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (ev.document_id) documentLink(ev.document_id).then(({ url }) => live && setUrl(url));
+    return () => { live = false; };
+  }, [ev.document_id]);
+  return (
+    <figure className="min-w-0">
+      <div className="flex aspect-[3/2] items-center justify-center overflow-hidden rounded-sheet border border-rule-strong bg-sheet">
+        {url
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={url} alt={ev.label ?? 'Photo cited as evidence'} className="h-full w-full object-cover" />
+          : <span className="text-xs text-ink-2">Loading photo…</span>}
+      </div>
+      <figcaption className="mt-1 text-xs text-ink-2">{ev.label}</figcaption>
+    </figure>
+  );
+}
+
+const isImage = (e?: FindingEvidence) => !!e?.document?.mime?.startsWith('image/');
+
 /** Two values that should agree are set side by side; a single piece of evidence stands alone. */
-function Evidence({ evidence, docLabel, onCite }: { evidence: FindingEvidence[]; docLabel: (t: string) => string; onCite: (c: Citation) => void }) {
+function Evidence({ evidence, docLabel, onCite, same = false }: {
+  evidence: FindingEvidence[];
+  docLabel: (t: string) => string;
+  onCite: (c: Citation) => void;
+  /** The finding is about two things that match (across institutions), not two that differ */
+  same?: boolean;
+}) {
   const a = evidence.find((e) => e.role === 'A');
   const b = evidence.find((e) => e.role === 'B');
   const singles = evidence.filter((e) => e.role !== 'A' && e.role !== 'B');
   return (
     <div className="space-y-3">
+      {a && b && isImage(a) && isImage(b) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <EvidencePhoto ev={a} />
+          <EvidencePhoto ev={b} />
+        </div>
+      )}
       {a && b && (
         <div className="grid items-start gap-3 rounded-sheet border border-rule bg-paper p-3 sm:grid-cols-[1fr_auto_1fr]">
           <EvidenceCell ev={a} docLabel={docLabel} onCite={onCite} />
-          <p className="self-center text-center text-sm font-semibold text-conflict">differs from</p>
+          <p className="self-center text-center text-sm font-semibold text-conflict">{same ? 'matches' : 'differs from'}</p>
           <EvidenceCell ev={b} docLabel={docLabel} onCite={onCite} />
         </div>
       )}
@@ -225,6 +261,86 @@ function ActionForm({ finding, onDone }: { finding: Finding; onDone: (f: Finding
   );
 }
 
+/** Confirm a value as read, or correct it; the value as printed is always kept (build spec 11). */
+export function FieldReview({ field, onDone }: { field: ExtractedField; onDone: (f: ExtractedField) => void }) {
+  const [mode, setMode] = useState<'confirm' | 'correct' | null>(null);
+  const [value, setValue] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const readAs = field.value_type === 'date' && field.field_value ? formatDateInWords(field.field_value) : field.field_value;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mode) return;
+    setBusy(true);
+    setError(null);
+    const { data, error } = await fetchApi<{ field: ExtractedField }>(`/fields/${field.id}/${mode}`, {
+      method: 'POST', body: JSON.stringify(mode === 'confirm' ? { reason: reason.trim() } : { value: value.trim(), reason: reason.trim() }),
+    });
+    setBusy(false);
+    if (data) { setMode(null); setReason(''); setValue(''); onDone(data.field); }
+    else setError(error);
+  };
+
+  return (
+    <div className="space-y-2 rounded-sheet border border-pending bg-pending-wash p-3 text-sm">
+      <p>
+        Printed as <Mark>{field.original_value ?? 'not found'}</Mark>
+        {readAs && <>, read as <span className="font-semibold">{readAs}</span></>}.
+        {field.review_reason && <span className="block text-ink-2">{field.review_reason}.</span>}
+      </p>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Check this value">
+        {field.field_value && (
+          <button type="button" aria-pressed={mode === 'confirm'} onClick={() => setMode(mode === 'confirm' ? null : 'confirm')}
+            className={`${btnSecondary} px-3 py-1.5 ${mode === 'confirm' ? 'border-officer bg-officer-wash text-officer' : ''}`}>
+            Confirm {readAs}
+          </button>
+        )}
+        <button type="button" aria-pressed={mode === 'correct'} onClick={() => setMode(mode === 'correct' ? null : 'correct')}
+          className={`${btnSecondary} px-3 py-1.5 ${mode === 'correct' ? 'border-officer bg-officer-wash text-officer' : ''}`}>
+          Correct it
+        </button>
+      </div>
+      {mode && (
+        <form onSubmit={submit} className="space-y-3 border-l-2 border-officer pl-4">
+          {mode === 'correct' && (
+            <div className="max-w-64">
+              <label htmlFor={`value-${field.id}`} className={label}>Correct value</label>
+              <input id={`value-${field.id}`} required value={value} onChange={(e) => setValue(e.target.value)} className={input}
+                placeholder={field.value_type === 'date' ? 'for example 8 March 2025' : undefined} />
+            </div>
+          )}
+          <div>
+            <label htmlFor={`freason-${field.id}`} className={label}>Reason</label>
+            <textarea id={`freason-${field.id}`} required minLength={3} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} className={input} />
+            <p className="mt-1 text-xs text-ink-2">Say how you checked it. The value as printed stays on record, and validation runs again.</p>
+          </div>
+          {error && <Notice kind="error">{error}</Notice>}
+          <button type="submit" disabled={busy || reason.trim().length < 3 || (mode === 'correct' && !value.trim())}
+            className="inline-flex items-center rounded-control bg-officer px-4 py-2 text-sm font-semibold text-sheet hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+            {busy ? 'Recording and validating…' : mode === 'confirm' ? 'Record as confirmed' : 'Record the correction'}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/** The value a "needs confirmation" finding is about, looked up from its document. */
+function FindingField({ finding, onReviewed }: { finding: Finding; onReviewed: () => void }) {
+  const [field, setField] = useState<ExtractedField | null>(null);
+  const documentId = finding.evidence[0]?.document_id;
+  const name = finding.finding_key.split('|')[2]?.split('.')[1];
+  useEffect(() => {
+    if (!documentId || !name) return;
+    fetchApi<{ fields: ExtractedField[] }>(`/documents/${documentId}/fields`)
+      .then(({ data }) => setField(data?.fields.find((f) => f.field_name === name) ?? null));
+  }, [documentId, name]);
+  if (!field || field.review_state !== 'needs_confirmation') return null;
+  return <FieldReview field={field} onDone={onReviewed} />;
+}
+
 /** What reviewers did on a finding, in green ink. */
 function ActionHistory({ finding }: { finding: Finding }) {
   if (finding.actions.length === 0 && finding.evidence_requests.length === 0) return null;
@@ -237,9 +353,13 @@ function ActionHistory({ finding }: { finding: Finding }) {
           <p className="text-ink">{a.reason}</p>
         </li>
       ))}
-      {finding.evidence_requests.filter((r) => r.status === 'open').map((r) => (
-        <li key={r.id} className="text-pending">Evidence due {formatDate(r.due_date)}</li>
-      ))}
+      {finding.evidence_requests.map((r) => r.status === 'open' ? (
+        <li key={r.id} className="text-pending">Waiting for the institution, due {formatDate(r.due_date)}</li>
+      ) : r.status === 'fulfilled' ? (
+        <li key={r.id} className="text-ink">
+          The institution answered{r.fulfilled_by_document_id ? ' and sent a document' : ''}. Its note is in the audit trail.
+        </li>
+      ) : null)}
     </ol>
   );
 }
@@ -248,11 +368,13 @@ const STATUS_TAG = {
   open: 'conflict', evidence_requested: 'pending', resolved: 'ok', dismissed: 'ok', auto_closed: 'neutral',
 } as const;
 
-export function FindingCard({ finding, docLabel, onCite, onChange, canAct }: {
+export function FindingCard({ finding, docLabel, onCite, onChange, onReviewed, canAct }: {
   finding: Finding;
   docLabel: (t: string) => string;
   onCite: (c: Citation) => void;
   onChange: (f: Finding) => void;
+  /** A value was confirmed or corrected, and validation ran again */
+  onReviewed: () => void;
   canAct: boolean;
 }) {
   const unresolved = finding.status === 'open' || finding.status === 'evidence_requested';
@@ -267,7 +389,11 @@ export function FindingCard({ finding, docLabel, onCite, onChange, canAct }: {
         {finding.severity && `, ${SEVERITY_LABEL[finding.severity].toLowerCase()} severity`}
       </p>
       <p className="text-sm">{finding.detail}</p>
-      {finding.evidence.length > 0 && <Evidence evidence={finding.evidence} docLabel={docLabel} onCite={onCite} />}
+      {finding.evidence.length > 0 && <Evidence evidence={finding.evidence} docLabel={docLabel} onCite={onCite} same={finding.is_cross_institution} />}
+      {finding.related_application_id && (
+        <Link href={`/review/${finding.related_application_id}`} className={btnQuiet}>Open the other application</Link>
+      )}
+      {canAct && unresolved && finding.finding_type === 'FIELD_NEEDS_CONFIRMATION' && <FindingField finding={finding} onReviewed={onReviewed} />}
       <ActionHistory finding={finding} />
       {canAct && unresolved && <ActionForm finding={finding} onDone={onChange} />}
     </article>
@@ -287,13 +413,21 @@ const EVENT_LABEL: Record<string, string> = {
   finding_dismiss: 'Finding dismissed',
   finding_request_evidence: 'Evidence requested',
   case_file_snapshot: 'Case File snapshot saved',
+  rooms_saved: 'Room table saved',
+  field_confirmed: 'Value confirmed',
+  field_corrected: 'Value corrected',
+  evidence_request_fulfilled: 'Institution answered a request',
 };
 
 function eventNote(e: AuditEvent): string {
   const d = e.detail ?? {};
   if (e.event_type === 'validation_run') {
-    return `${d.findings ?? 0} findings: ${d.created ?? 0} new, ${d.still_open ?? 0} still open, ${d.auto_closed ?? 0} closed. As of ${formatDate(String(d.as_of_date ?? ''))}.`;
+    const by = d.trigger === 'document_replaced' ? 'After a replacement document was read. ' : d.trigger === 'value_confirmed' ? 'After a value was checked. ' : '';
+    return `${by}${d.findings ?? 0} findings: ${d.created ?? 0} new, ${d.still_open ?? 0} still open, ${d.auto_closed ?? 0} closed. As of ${formatDate(String(d.as_of_date ?? ''))}.`;
   }
+  if (e.event_type === 'evidence_request_fulfilled' && typeof d.note === 'string') return d.note;
+  if (e.event_type === 'rooms_saved') return `${d.rooms ?? 0} rooms, ${d.total_sqm ?? 0} sq m`;
+  if (e.event_type === 'field_corrected') return `${String(d.from ?? 'not read')} to ${String(d.to)}: ${String(d.reason ?? '')}`;
   if (typeof d.reason === 'string') return d.reason;
   if (typeof d.original_name === 'string') return d.original_name;
   return '';

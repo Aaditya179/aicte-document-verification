@@ -157,6 +157,19 @@ def _min_confidence() -> float:
         return extraction.DEFAULT_MIN_CONFIDENCE
 
 
+def revalidate_after_replacement(application: dict) -> None:
+    """A document read into an application that has been validated before (a replacement, usually for an
+    evidence request) gets a fresh full run, so findings that no longer hold close automatically and any
+    new one appears (build spec 7.1, step 3). The run is recorded as the system's, not a person's."""
+    from services.validation import has_full_run, run_validation  # validation reads documents; avoid an import cycle
+    if application["workflow_status"] == "draft" or not has_full_run(application["id"]):
+        return
+    try:
+        run_validation(application["id"], "full", None, trigger="document_replaced")
+    except Exception:
+        logger.exception("Validation after a replacement failed for %s", application["id"])
+
+
 def process_document(document_id: str) -> None:
     """Read the document. Runs in the background after finalize; never raises."""
     document = db.fetch_one("documents", id=document_id)
@@ -190,6 +203,7 @@ def process_document(document_id: str) -> None:
 
         db.update("documents", document_id, {"processing_status": "done", "processing_note": None})
         audit.record(None, "document_processed", "document", document_id, document["application_id"], counts)
+        revalidate_after_replacement(application)
     except Exception as exc:
         logger.exception("Reading document %s failed", document_id)
         note = str(exc) if isinstance(exc, extraction.UnreadableFile) else "The document could not be read"

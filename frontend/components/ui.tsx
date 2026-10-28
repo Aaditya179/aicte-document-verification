@@ -150,6 +150,14 @@ export function formatDateTime(value?: string | Date | null) {
   return Number.isNaN(d.getTime()) ? String(value) : `${ddmmyyyy(d)}, ${formatTime(d)}`;
 }
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** A date with the month in words ("3 August 2025"), for when dd/mm/yyyy is itself the ambiguity. */
+export function formatDateInWords(iso?: string | null) {
+  const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : (iso ?? '—');
+}
+
 export function formatBytes(n?: number | null) {
   if (!n) return '—';
   return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;

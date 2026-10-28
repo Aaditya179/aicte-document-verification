@@ -8,13 +8,14 @@ import { fetchApi } from '@/lib/api';
 import { HOME, type Me } from '@/components/ui';
 import { ROLE_LABEL, type Role } from '@/lib/types';
 import Brand from './Brand';
+import Notifications from './Notifications';
 
 type NavLink = { href: string; label: string };
 
 // Each role sees only the pages it can use
 const NAV_LINKS: Record<Role, NavLink[]> = {
   institution: [{ href: '/institution', label: 'Your applications' }],
-  reviewer: [{ href: '/review', label: 'Applications' }],
+  reviewer: [{ href: '/review', label: 'Review queue' }, { href: '/review/cross', label: 'Across institutions' }],
   rule_admin: [{ href: '/admin/rules', label: 'Rules' }],
 };
 
@@ -49,7 +50,9 @@ export default function Navbar() {
         <Brand href={me ? HOME[me.role] : '/welcome'} />
         <nav aria-label="Main" className="flex flex-1 items-center gap-5">
           {links.map((l) => {
-            const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+            // The longest matching link is the active one, so /review/cross does not also light up /review
+            const matches = (h: string) => pathname === h || pathname.startsWith(`${h}/`);
+            const active = matches(l.href) && !links.some((o) => o.href.length > l.href.length && matches(o.href));
             return (
               <Link key={l.href} href={l.href} aria-current={active ? 'page' : undefined}
                 className={`text-sm font-semibold underline-offset-[6px] ${active ? 'text-ink underline decoration-2' : 'text-ink-2 hover:text-ink hover:underline'}`}>
@@ -60,6 +63,7 @@ export default function Navbar() {
         </nav>
         {me && (
           <div className="flex items-center gap-4 text-sm">
+            <Notifications role={me.role} />
             <span className="text-ink-2">
               <span className="font-semibold text-ink">{me.full_name || me.email}</span>
               <span className="hidden sm:inline">, {ROLE_LABEL[me.role].toLowerCase()}</span>

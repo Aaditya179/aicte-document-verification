@@ -2,6 +2,10 @@
   "note": "Synthetic dataset. Every institution, person and document is fictional; rules are illustrative.",
   "as_of": "2026-11-01",
   "clean_control": "INST-1001-2026-27-01",
+  "must_not_flag": [
+    "INST-1001-2026-27-01",
+    "INST-2018-2027-28-01"
+  ],
   "applications": {
     "INST-1001-2026-27-01": {
       "scenario": "clean_control",
@@ -62,6 +66,74 @@
       "note": "Fire NOC valid until a date before its date of issue",
       "expected": [
         "DATE_ORDER_INVALID|INST-2008-2027-28-01|fire_noc"
+      ]
+    },
+    "INST-2016-2027-28-01": {
+      "scenario": "ghost_faculty",
+      "note": "Dr. Rohini Deshpande (PhD) also listed by INST-2017-2027-28-01 as Rohini S. Deshpande (PhD), periods overlapping",
+      "expected": [
+        "GHOST_FACULTY|INST-2016-2027-28-01|INST-2017-2027-28-01|F-005"
+      ]
+    },
+    "INST-2017-2027-28-01": {
+      "scenario": "ghost_faculty",
+      "note": "Rohini S. Deshpande (PhD) also listed by INST-2016-2027-28-01 as Dr. Rohini Deshpande (PhD), periods overlapping",
+      "expected": [
+        "GHOST_FACULTY|INST-2017-2027-28-01|INST-2016-2027-28-01|F-005"
+      ]
+    },
+    "INST-2018-2027-28-01": {
+      "scenario": "lookalike",
+      "note": "Rohini Deshpande with an M.Tech and another ID: same name, different qualification, not the same person",
+      "expected": []
+    },
+    "INST-2019-2027-28-01": {
+      "scenario": "photo_reuse",
+      "note": "Its lab photo appears, resized and re-saved, in INST-2020-2027-28-01",
+      "expected": [
+        "PHOTO_REUSE|INST-2019-2027-28-01|INST-2020-2027-28-01"
+      ]
+    },
+    "INST-2020-2027-28-01": {
+      "scenario": "photo_reuse",
+      "note": "Its lab photo is INST-2019-2027-28-01's, resized to 1000 x 667 and re-saved at quality 70",
+      "expected": [
+        "PHOTO_REUSE|INST-2020-2027-28-01|INST-2019-2027-28-01"
+      ]
+    },
+    "INST-2021-2027-28-01": {
+      "scenario": "reused_identifier",
+      "note": "Survey number 175/6 also given by INST-2022-2027-28-01",
+      "expected": [
+        "REUSED_IDENTIFIER|INST-2021-2027-28-01|INST-2022-2027-28-01|survey_no"
+      ]
+    },
+    "INST-2022-2027-28-01": {
+      "scenario": "reused_identifier",
+      "note": "Survey number 175/6 also given by INST-2021-2027-28-01",
+      "expected": [
+        "REUSED_IDENTIFIER|INST-2022-2027-28-01|INST-2021-2027-28-01|survey_no"
+      ]
+    },
+    "INST-2023-2027-28-01": {
+      "scenario": "area_mismatch",
+      "note": "Rooms in the room table add up to 92% of the declared built-up area (tolerance 1%)",
+      "expected": [
+        "AREA_MISMATCH|INST-2023-2027-28-01|total"
+      ]
+    },
+    "INST-2024-2027-28-01": {
+      "scenario": "stale_photo",
+      "note": "Lab photo taken on 15/06/2025, more than 12 months before the as-of date",
+      "expected": [
+        "PHOTO_METADATA|INST-2024-2027-28-01|lab"
+      ]
+    },
+    "INST-2025-2027-28-01": {
+      "scenario": "infra_evidence_missing",
+      "note": "Lab and classroom photos only; no library photo",
+      "expected": [
+        "INFRA_EVIDENCE_MISSING|INST-2025-2027-28-01|library"
       ]
     },
     "INST-2009-2027-28-01": {

@@ -5,6 +5,7 @@ The Supabase project is shared with Nirikshan, whose tables are in `public`. Eve
 through `db.table(...)`, which is bound to settings.SUPABASE_SCHEMA, so ProofPath code cannot read or
 write Nirikshan's tables by accident. The schema must be listed under Data API -> Exposed schemas.
 """
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
@@ -13,6 +14,26 @@ from postgrest import SyncPostgrestClient
 from supabase import Client, create_client
 
 from core.config import settings
+
+
+class _RetryDropped(httpx.HTTPTransport):
+    """Supabase closes idle keep-alive connections; a request sent on one just as it closes fails with
+    "Server disconnected", and its gateway now and then answers 502. Reads, and updates and deletes (which
+    give the same result twice), are sent again once. An insert is not resent, so it is never stored twice."""
+    SAFE = {"GET", "HEAD", "PATCH", "DELETE"}
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        try:
+            response = super().handle_request(request)
+        except (httpx.RemoteProtocolError, httpx.ReadError):
+            if request.method not in self.SAFE:
+                raise
+            return super().handle_request(request)
+        if response.status_code in (502, 503, 504) and request.method == "GET":
+            response.close()
+            time.sleep(0.5)
+            return super().handle_request(request)
+        return response
 
 
 class Database:
@@ -24,8 +45,8 @@ class Database:
         # because `parallel` sends queries from several threads and one shared HTTP/2 connection drops them.
         base = self.client.schema(self.schema)
         self.rest = SyncPostgrestClient(str(base.base_url), schema=self.schema, headers=dict(base.headers),
-                                        http_client=httpx.Client(timeout=30, follow_redirects=True,
-                                                                 limits=httpx.Limits(max_connections=16)))
+                                        http_client=httpx.Client(timeout=30, follow_redirects=True, transport=_RetryDropped(
+                                            limits=httpx.Limits(max_connections=16))))
         base.session.close()
 
     def table(self, table_name: str):

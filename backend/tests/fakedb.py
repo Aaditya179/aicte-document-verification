@@ -53,6 +53,11 @@ class FakeQuery:
         self.filters.append(lambda r: r.get(col) != value)
         return self
 
+    def is_(self, col, value):
+        expected = None if value == "null" else value
+        self.filters.append(lambda r: r.get(col) is expected)
+        return self
+
     def in_(self, col, values):
         values = list(values)
         self.filters.append(lambda r: r.get(col) in values)
@@ -77,6 +82,9 @@ class FakeQuery:
         if self.op == "insert":
             many = isinstance(self.payload, list)
             new = [{"id": str(uuid.uuid4()), "created_at": _now(), **row} for row in (self.payload if many else [self.payload])]
+            if self.table == "rooms":                  # area_sqm is a generated column in Postgres
+                for r in new:
+                    r["area_sqm"] = r["length_m"] * r["width_m"]
             self.rows.extend(new)
             return SimpleNamespace(data=[dict(r) for r in new], count=None)
         if self.op == "upsert":
