@@ -15,7 +15,10 @@ function FulfilForm({ request, documents, docLabel, onDone }: {
   // The newest current document is usually the replacement just uploaded
   const choices = documents.filter((d) => d.status === 'current' && d.integrity_status === 'passed')
     .sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
-  const [documentId, setDocumentId] = useState(choices[0]?.id ?? '');
+  // Until the institution picks one, follow the newest choice: a replacement uploaded after this form
+  // appeared supersedes the document picked before, which the API would then refuse
+  const [picked, setPicked] = useState<string | null>(null);
+  const documentId = picked !== null && (picked === '' || choices.some((d) => d.id === picked)) ? picked : choices[0]?.id ?? '';
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +40,7 @@ function FulfilForm({ request, documents, docLabel, onDone }: {
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label htmlFor={`doc-${request.id}`} className={label}>Document that answers it</label>
-          <select id={`doc-${request.id}`} className={input} value={documentId} onChange={(e) => setDocumentId(e.target.value)}>
+          <select id={`doc-${request.id}`} className={input} value={documentId} onChange={(e) => setPicked(e.target.value)}>
             <option value="">No document, a note only</option>
             {choices.map((d) => <option key={d.id} value={d.id}>{docLabel(d)}, version {d.version} ({d.original_name})</option>)}
           </select>

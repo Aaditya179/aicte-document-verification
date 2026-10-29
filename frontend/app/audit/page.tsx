@@ -10,7 +10,6 @@ import {
   Notice,
   PageShell,
   Tag,
-  btnPrimary,
   btnSecondary,
   formatDate,
   formatDateTime,
@@ -20,29 +19,36 @@ import {
   th,
 } from '@/components/ui';
 
+// Keyed by the event types the API writes (audit.record calls in the backend)
 const EVENT_LABELS: Record<string, string> = {
-  application_seeded: 'Application seeded',
+  application_created: 'Application created',
+  application_seeded: 'Application loaded with demo data',
   application_submitted: 'Application submitted',
-  document_uploaded: 'Document uploaded',
-  document_processed: 'Document processed',
-  document_processing_failed: 'Document reading failed',
+  document_upload_started: 'Upload started',
+  document_finalized: 'Document received',
+  document_processed: 'Document read',
+  document_processing_failed: 'Document could not be read',
   validation_run: 'Validation run',
-  finding_resolved: 'Finding resolved',
-  finding_dismissed: 'Finding dismissed',
-  evidence_requested: 'Evidence requested',
-  evidence_request_fulfilled: 'Request answered',
+  finding_resolve: 'Finding resolved',
+  finding_dismiss: 'Finding dismissed',
+  finding_request_evidence: 'Evidence requested',
+  evidence_request_fulfilled: 'Institution answered a request',
   case_file_snapshot: 'Case File snapshot saved',
   rooms_saved: 'Room table saved',
   field_confirmed: 'Value confirmed',
   field_corrected: 'Value corrected',
-  rule_created: 'Rule draft created',
+  registry_checked: 'Issuer registry checked',
+  signature_checked: 'Signature checked',
+  manual_check_recorded: 'Manual check recorded',
+  rule_drafted: 'Rule draft created',
+  rule_drafted_from_text: 'Rule drafted from text',
+  rule_edited: 'Rule draft edited',
   rule_submitted: 'Rule submitted for approval',
+  rule_returned: 'Rule returned to its author',
   rule_approved: 'Rule approved',
   rule_activated: 'Rule activated',
   rule_retired: 'Rule retired',
-  rule_drafted_from_text: 'Rule drafted from text',
-  settings_updated: 'Settings updated',
-  verification_recorded: 'Verification check recorded',
+  setting_changed: 'Setting changed',
 };
 
 function eventNote(e: AuditEvent): string {
@@ -60,8 +66,8 @@ function eventNote(e: AuditEvent): string {
   if (e.event_type === 'rooms_saved') return `${d.rooms ?? 0} rooms, ${d.total_sqm ?? 0} sq m`;
   if (e.event_type === 'field_corrected')
     return `${String(d.from ?? 'not read')} → ${String(d.to)}: ${String(d.reason ?? '')}`;
-  if (e.event_type === 'settings_updated')
-    return `${String(d.key ?? '')}: ${String(d.reason ?? 'Configuration updated')}`;
+  if (e.event_type === 'setting_changed' && e.entity_id)
+    return `${e.entity_id.replace(/_/g, ' ')}: ${String(d.reason ?? 'Configuration updated')}`;
   if (typeof d.reason === 'string') return d.reason;
   if (typeof d.message === 'string') return d.message;
   if (typeof d.original_name === 'string') return d.original_name;

@@ -360,6 +360,7 @@ export interface AuditEvent {
   actor_role: string | null;
   event_type: string;
   entity_type: string | null;
+  entity_id: string | null;
   application_id: string | null;
   detail: Record<string, unknown> | null;
   created_at: string;

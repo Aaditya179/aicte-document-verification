@@ -27,10 +27,13 @@ def _doc_label(d: dict) -> str:
     return d.get("label") or (d.get("doc_type") or "document").replace("_", " ").capitalize()
 
 
-def _authenticity(documents: list[dict], checks: list[dict], problem_findings: list[str]) -> dict:
+def _authenticity(documents: list[dict], checks: list[dict], signature_findings: list[str],
+                  registry_findings: list[str]) -> dict:
     """The latest check per document and method decides that method's state; methods never override
     each other, and the worst state over all documents wins. An unavailable source is Pending, never
-    a failure. Every reason names the document and the method, and a MOCK source says so."""
+    a failure. Every reason names the document and the method, and a MOCK source says so. An open
+    signature or registry finding always counts, so an unsigned document whose type requires a
+    signature is never outweighed by a valid signature on another document."""
     labels = {d["id"]: _doc_label(d) for d in documents}
     latest: dict[tuple, dict] = {}
     for c in sorted(checks, key=lambda c: c.get("checked_at") or ""):
@@ -49,9 +52,13 @@ def _authenticity(documents: list[dict], checks: list[dict], problem_findings: l
     good = [c for c in latest.values() if (c["method"], c.get("status")) in
             (("SIGNATURE", "valid"), ("REGISTRY", "match"), ("MANUAL", "manual_confirmed"))]
 
-    if bad_signature or bad_source:
-        value = ("Signature invalid or source mismatch" if bad_signature and bad_source
-                 else "Signature invalid" if bad_signature else "Source mismatch")
+    problem_findings = signature_findings + registry_findings
+    if bad_signature or bad_source or problem_findings:
+        if bad_signature or bad_source:
+            value = ("Signature invalid or source mismatch" if bad_signature and bad_source
+                     else "Signature invalid" if bad_signature else "Source mismatch")
+        else:
+            value = "Signature missing" if signature_findings else "Source mismatch"
         reasons = [line(c, "signature " + c["status"].replace("_", " ")) for c in bad_signature]
         reasons += [line(c, "values differ" if c["method"] == "REGISTRY" else "the issuer did not confirm it") for c in bad_source]
         return _status("authenticity", "Authenticity", value, "conflict", reasons + problem_findings)
@@ -117,7 +124,7 @@ def compute(has_run: bool, findings: list[dict], documents: list[dict], fields: 
     else:
         consistency = _status("consistency", "Consistency", "Consistent", "ok")
 
-    authenticity = _authenticity(documents, checks, of_type({"SIGNATURE_INVALID", "REGISTRY_MISMATCH"}))
+    authenticity = _authenticity(documents, checks, of_type({"SIGNATURE_INVALID"}), of_type({"REGISTRY_MISMATCH"}))
 
     # Compliance
     compliance_findings = of_type(COMPLIANCE_TYPES)

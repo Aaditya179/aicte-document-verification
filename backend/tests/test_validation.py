@@ -180,6 +180,16 @@ def test_unavailable_registry_is_pending_not_failure():
     assert _statuses([], checks=checks)["authenticity"] == "Pending (source unavailable) (MOCK source)"
 
 
+def test_open_signature_finding_outweighs_a_valid_signature_elsewhere():
+    # An unsigned affidavit (its type requires a signature) next to a validly signed certificate
+    checks = [{"document_id": "a", "method": "SIGNATURE", "status": "valid", "checked_at": "1"},
+              {"document_id": "b", "method": "SIGNATURE", "status": "unsigned", "checked_at": "1"}]
+    unsigned = {"finding_type": "SIGNATURE_INVALID", "status": "open",
+                "title": "Affidavit has no digital signature; this document type requires one"}
+    assert _statuses([unsigned], checks=checks)["authenticity"] == "Signature missing"
+    assert _statuses([{**unsigned, "status": "dismissed"}], checks=checks)["authenticity"] == "Signature valid"
+
+
 def test_value_waiting_for_confirmation_is_inconclusive():
     fields = [{"doc_type": "approval_certificate", "field_name": "issue_date", "field_value": "2025-08-03",
                "review_state": "needs_confirmation"}]

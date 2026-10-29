@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { fetchApi } from '@/lib/api';
 import { humanize, type AdminSettings, type ExtractionTemplate, type RegistryMode, type RegistrySetting } from '@/lib/types';
-import { Loading, Notice, PageShell, Tag, btnPrimary, btnQuiet, btnSecondary, formatDate, input, label, td, th, useMe } from '@/components/ui';
+import { Loading, Notice, PageShell, Tag, btnQuiet, btnSecondary, formatDate, input, label, td, th, useMe } from '@/components/ui';
 
 const MODE_TEXT: Record<RegistryMode, { title: string; text: string }> = {
   unavailable: {
