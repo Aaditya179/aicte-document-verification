@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { fetchApi } from '@/lib/api';
 import { FINDING_TYPE_LABEL, WORKFLOW_LABEL, type QueueRow, type WorkflowStatus } from '@/lib/types';
 import { PriorityLedger } from '@/components/findings';
-import { Empty, FileNumber, Loading, Notice, PageShell, Tag, btnQuiet, formatDate, formatDateTime, input, label, td, th } from '@/components/ui';
+import { Empty, FileNumber, Notice, PageShell, Placeholder, Skeleton, Tag, btnQuiet, formatDate, formatDateTime, input, label, td, th } from '@/components/ui';
 
 const BAND_TONE = { High: 'conflict', Medium: 'pending', Low: 'neutral' } as const;
 
@@ -99,7 +99,20 @@ export default function ReviewQueue() {
       </div>
 
       {error && <Notice kind="error">{error}</Notice>}
-      {!rows && !error && <Loading what="Ordering the queue" />}
+      {!rows && !error && (
+        <Skeleton what="Ordering the queue">
+          <div className="overflow-hidden rounded-sheet border border-rule bg-sheet" aria-hidden="true">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="grid grid-cols-[6rem_1fr_1fr_6rem] items-center gap-4 border-b border-rule px-3 py-4 last:border-b-0">
+                <Placeholder className="h-6 w-14" />
+                <div className="space-y-2"><Placeholder className="h-4 w-40" /><Placeholder className="h-3 w-56 max-w-full" /></div>
+                <Placeholder className="h-3 w-3/4" />
+                <Placeholder className="h-3 w-16" />
+              </div>
+            ))}
+          </div>
+        </Skeleton>
+      )}
       {rows && rows.length === 0 && (
         <Empty>{filtered ? 'No application matches these filters.' : 'Nothing to review yet. Applications appear here once institutions submit them.'}</Empty>
       )}

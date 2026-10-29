@@ -17,7 +17,10 @@ const MODE_TEXT: Record<RegistryMode, { title: string; text: string }> = {
   },
 };
 
-type Ctx = { reason: string; canEdit: boolean; onSaved: (text: string) => void; onError: (text: string) => void; reload: () => void };
+type Ctx = {
+  reason: string; canEdit: boolean; busy: boolean; setBusy: (b: boolean) => void;
+  onSaved: (text: string) => void; onError: (text: string) => void; reload: () => void;
+};
 
 function Section({ id, title, text, children }: { id: string; title: React.ReactNode; text: string; children: React.ReactNode }) {
   return (
@@ -32,13 +35,15 @@ function Section({ id, title, text, children }: { id: string; title: React.React
 }
 
 async function save(ctx: Ctx, path: string, body: Record<string, unknown>, done: string, method = 'PUT') {
+  ctx.setBusy(true);
   const { data, error } = await fetchApi(path, { method, body: JSON.stringify({ ...body, reason: ctx.reason.trim() }) });
+  ctx.setBusy(false);
   if (data) { ctx.onSaved(done); ctx.reload(); return true; }
   ctx.onError(error ?? 'Not saved');
   return false;
 }
 
-const ready = (ctx: Ctx) => ctx.canEdit && ctx.reason.trim().length >= 3;
+const ready = (ctx: Ctx) => ctx.canEdit && !ctx.busy && ctx.reason.trim().length >= 3;
 
 function AsOf({ s, ctx }: { s: AdminSettings; ctx: Ctx }) {
   const [mode, setMode] = useState(s.as_of.mode);
@@ -392,6 +397,7 @@ export default function SettingsPage() {
   const [reason, setReason] = useState('');
   const [note, setNote] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [version, setVersion] = useState(0);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     fetchApi<AdminSettings>('/admin/settings').then(({ data, error }) => (data ? setSettings(data) : setError(error)));
@@ -400,7 +406,7 @@ export default function SettingsPage() {
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   const canEdit = me?.role === 'rule_admin';
   const ctx: Ctx = {
-    reason, canEdit, reload,
+    reason, canEdit, reload, busy, setBusy,
     onSaved: (text) => setNote({ kind: 'success', text }),
     onError: (text) => setNote({ kind: 'error', text }),
   };
@@ -438,7 +444,8 @@ export default function SettingsPage() {
               ) : (
                 <p className="text-sm text-ink-2">Only a rule administrator can change settings.</p>
               )}
-              {note && <Notice kind={note.kind}>{note.text}</Notice>}
+              {busy && <p className="text-sm text-ink-2" role="status">Saving…</p>}
+              {!busy && note && <Notice kind={note.kind}>{note.text}</Notice>}
             </div>
           </aside>
         </div>

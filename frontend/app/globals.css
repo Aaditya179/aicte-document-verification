@@ -91,6 +91,49 @@ body {
   }
 }
 
+/* Loading: a highlighter stroke sweeping along a ruled line */
+.reading-line {
+  position: relative;
+  display: inline-block;
+  width: 3rem;
+  height: 0.85rem;
+  flex: none;
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-rule-strong);
+}
+
+.reading-line::after {
+  content: '';
+  position: absolute;
+  inset: 15% auto 12% 0;
+  width: 100%;
+  background: var(--color-mark);
+  transform-origin: left;
+  animation: reading 1.4s ease-in-out infinite;
+}
+
+@keyframes reading {
+  0% { transform: scaleX(0); opacity: 1; }
+  60% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+/* Skeleton blocks: ruled grey that breathes slowly */
+.placeholder {
+  background: var(--color-rule);
+  animation: breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reading-line::after { animation: none; transform: scaleX(0.6); }
+  .placeholder { animation: none; opacity: 0.6; }
+}
+
 /* Register paper: faint ruled lines, used for document specimens */
 .ruled {
   background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--color-rule) 31px 32px);

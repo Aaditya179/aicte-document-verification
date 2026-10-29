@@ -8,7 +8,7 @@ import {
   type AuditEvent, type ExtractedField, type Finding, type FindingClauses, type FindingEvidence, type Priority, type ReviewActionKind, type StatusCard,
 } from '@/lib/types';
 import { documentLink } from './documents';
-import { Empty, Loading, Mark, Notice, Tag, btnQuiet, btnSecondary, formatDate, formatDateInWords, formatDateTime, input, label, sheet, td, th } from './ui';
+import { Empty, Loading, Mark, Notice, Placeholder, Skeleton, Tag, btnQuiet, btnSecondary, formatDate, formatDateInWords, formatDateTime, input, label, sheet, td, th } from './ui';
 
 // Green ink is kept for what a person did, so a passed status is written in plain ink
 const STATUS_TONE = {
@@ -39,6 +39,50 @@ export function StatusCards({ statuses }: { statuses: StatusCard[] }) {
 }
 
 /** The priority score worked out as a sum, so the reviewer sees how it was reached (build spec 7.4). */
+export function StatusCardsSkeleton() {
+  return (
+    <Skeleton what="Loading statuses">
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => (
+          <li key={i} className={`${sheet} space-y-3 border-t-[3px] border-t-rule-strong p-4`}>
+            <Placeholder className="h-3 w-20" />
+            <Placeholder className="h-5 w-32" />
+            <Placeholder className="h-3 w-full" />
+          </li>
+        ))}
+      </ul>
+    </Skeleton>
+  );
+}
+
+export function FindingsSkeleton() {
+  return (
+    <Skeleton what="Loading findings">
+      <div className="space-y-4" aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className={`${sheet} space-y-3 p-4`}>
+            <div className="flex justify-between gap-4"><Placeholder className="h-4 w-2/3" /><Placeholder className="h-4 w-16" /></div>
+            <Placeholder className="h-3 w-1/2" />
+            <Placeholder className="h-3 w-full" />
+            <div className="grid grid-cols-2 gap-3"><Placeholder className="h-12" /><Placeholder className="h-12" /></div>
+          </div>
+        ))}
+      </div>
+    </Skeleton>
+  );
+}
+
+export function PriorityLedgerSkeleton() {
+  return (
+    <Skeleton what="Loading priority">
+      <div className={`${sheet} space-y-3 p-4`} aria-hidden="true">
+        <Placeholder className="h-6 w-24" />
+        {[0, 1, 2].map((i) => <div key={i} className="flex justify-between gap-4"><Placeholder className="h-3 w-2/3" /><Placeholder className="h-3 w-8" /></div>)}
+      </div>
+    </Skeleton>
+  );
+}
+
 export function PriorityLedger({ priority }: { priority: Priority }) {
   return (
     <div className={`${sheet} p-4`}>

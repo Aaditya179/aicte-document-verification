@@ -81,8 +81,56 @@ export function Mark({ children, onClick, title }: { children: React.ReactNode; 
   return <span className="mark font-semibold" title={title}>{children}</span>;
 }
 
+/** Shown after this long, so a slow first load says why */
+const SLOW_MS = 3000;
+
+function useSlow(): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_MS);
+    return () => clearTimeout(t);
+  }, []);
+  return slow;
+}
+
+function SlowNote() {
+  return (
+    <p className="mt-2 text-xs text-ink-2">
+      Still working. If nobody has used the site for a while, the server takes up to a minute to wake up.
+    </p>
+  );
+}
+
+/** Waiting for data: a highlighter sweeping along a ruled line, as if a value were being read. The words
+ *  carry the meaning; with reduced motion asked for, the mark stands still. */
 export function Loading({ what = 'Loading' }: { what?: string }) {
-  return <p className="py-6 text-sm text-ink-2" role="status">{what}…</p>;
+  const slow = useSlow();
+  return (
+    <div className="py-6" role="status" aria-live="polite">
+      <p className="flex items-center gap-3 text-sm text-ink-2">
+        <span className="reading-line" aria-hidden="true" />
+        <span>{what}…</span>
+      </p>
+      {slow && <SlowNote />}
+    </div>
+  );
+}
+
+/** A ruled placeholder in the shape of what is coming, so the page does not jump when it arrives. */
+export function Placeholder({ className = '' }: { className?: string }) {
+  return <span aria-hidden="true" className={`placeholder block rounded-[2px] ${className}`} />;
+}
+
+/** Placeholders laid out like a page section, with the words for screen readers. */
+export function Skeleton({ what, children }: { what: string; children: React.ReactNode }) {
+  const slow = useSlow();
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">{what}…</span>
+      {children}
+      {slow && <SlowNote />}
+    </div>
+  );
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {

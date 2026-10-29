@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends
 
 from core import demo
-from core.db import db
+from core.db import db, parallel
 from core.security import AuthenticatedUser, require_role
 from services import audit
 
@@ -20,11 +20,8 @@ def demo_accounts():
 @router.get("/reference")
 def reference(user: AuthenticatedUser = Depends(require_role(["institution", "reviewer", "rule_admin"]))):
     """Categories, document types and which documents each category requires."""
-    return {
-        "categories": db.fetch_all("categories"),
-        "document_types": db.fetch_all("document_types"),
-        "required_documents": db.fetch_all("required_documents"),
-    }
+    categories, types, required = parallel(*(lambda t=t: db.fetch_all(t) for t in ("categories", "document_types", "required_documents")))
+    return {"categories": categories, "document_types": types, "required_documents": required}
 
 
 @router.get("/audit/verify", tags=["Audit"])

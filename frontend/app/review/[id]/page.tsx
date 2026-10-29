@@ -11,10 +11,12 @@ import {
 } from '@/lib/types';
 import { Checklist, FileCover } from '@/components/FileCover';
 import { FileCheckTag, ReadingTag, documentLink, isBeingRead } from '@/components/documents';
-import { AuditTrail, CitedPage, FieldReview, FindingCard, PriorityLedger, StatusCards, type Citation } from '@/components/findings';
+import {
+  AuditTrail, CitedPage, FieldReview, FindingCard, FindingsSkeleton, PriorityLedger, PriorityLedgerSkeleton, StatusCards, StatusCardsSkeleton, type Citation,
+} from '@/components/findings';
 import { RoomTable } from '@/components/rooms';
 import { VerificationPanel } from '@/components/verification';
-import { Empty, Loading, Mark, Notice, Tag, btnPrimary, btnQuiet, formatDate, formatDateTime, td, th, useMe } from '@/components/ui';
+import { Empty, Loading, Mark, Notice, Placeholder, Skeleton, Tag, btnPrimary, btnQuiet, formatDate, formatDateTime, td, th, useMe } from '@/components/ui';
 
 type View = { url: string; mime: string; page: number | null };
 
@@ -181,6 +183,27 @@ function FindingGroup({ title, id, findings, empty, onChange, ...card }: {
   );
 }
 
+/** The case page's shape while the application loads: file cover, the four statuses, findings. */
+function CaseSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-10 px-4 py-8 sm:px-6">
+      <Skeleton what="Opening the application">
+        <div className="space-y-4 rounded-sheet border border-rule bg-sheet p-6" aria-hidden="true">
+          <Placeholder className="h-3 w-24" />
+          <Placeholder className="h-7 w-72 max-w-full" />
+          <Placeholder className="h-3 w-96 max-w-full" />
+          <Placeholder className="h-9 w-40" />
+        </div>
+      </Skeleton>
+      <StatusCardsSkeleton />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_26rem]">
+        <FindingsSkeleton />
+        <PriorityLedgerSkeleton />
+      </div>
+    </div>
+  );
+}
+
 function ReviewApplication() {
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
@@ -274,7 +297,7 @@ function ReviewApplication() {
   }, [show]);
 
   if (error) return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><Notice kind="error">{error}</Notice></div>;
-  if (!detail) return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><Loading what="Opening the application" /></div>;
+  if (!detail) return <CaseSkeleton />;
 
   const docLabel = (t: string) => types[t] ?? humanize(t);
   const canAct = me?.role === 'reviewer';
@@ -309,7 +332,7 @@ function ReviewApplication() {
       <section aria-labelledby="statuses" className="space-y-3">
         <h2 id="statuses" className="font-serif text-xl font-bold">Where this application stands</h2>
         <p className="text-sm text-ink-2">Four separate statuses. They are never added together, and none of them is the decision.</p>
-        {statusView ? <StatusCards statuses={statusView.statuses} /> : <Loading what="Loading statuses" />}
+        {statusView ? <StatusCards statuses={statusView.statuses} /> : <StatusCardsSkeleton />}
       </section>
 
       <section aria-labelledby="findings" className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_26rem]">
@@ -318,7 +341,7 @@ function ReviewApplication() {
             <h2 id="findings" className="font-serif text-xl font-bold">Findings</h2>
             <p className="mt-1 text-sm text-ink-2">Each finding says what differs and where. Choose a highlighted value to open its page.</p>
           </div>
-          {!findings ? <Loading what="Loading findings" /> : !lastRun && findings.length === 0 ? (
+          {!findings ? <FindingsSkeleton /> : !lastRun && findings.length === 0 ? (
             <Empty>No findings yet. Run validation to check the documents against the rules and against each other.</Empty>
           ) : (
             <>
@@ -336,7 +359,7 @@ function ReviewApplication() {
           </div>
           <div>
             <h3 className="mb-2 font-serif text-lg font-bold">Review priority</h3>
-            {priority ? <PriorityLedger priority={priority} /> : <Loading what="Loading priority" />}
+            {priority ? <PriorityLedger priority={priority} /> : <PriorityLedgerSkeleton />}
           </div>
           {lastRun?.rule_versions && (
             <div>
@@ -467,7 +490,7 @@ function ReviewApplication() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><Loading what="Opening the application" /></div>}>
+    <Suspense fallback={<CaseSkeleton />}>
       <ReviewApplication />
     </Suspense>
   );

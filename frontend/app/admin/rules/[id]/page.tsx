@@ -200,7 +200,9 @@ function Actions({ rule, meId, onDone }: { rule: Rule; meId: string; onDone: (r?
   const author = rule.created_by === meId;
   const approved = Boolean(rule.approved_by);
 
-  const act = async (path: string, extra: Record<string, unknown> = {}) => {
+  const [doing, setDoing] = useState('');
+  const act = async (path: string, extra: Record<string, unknown> = {}, what = 'Saving') => {
+    setDoing(what);
     setBusy(true);
     setError(null);
     const { data, error } = await fetchApi<Rule>(path, { method: 'POST', body: JSON.stringify({ reason: reason.trim(), ...extra }) });
@@ -215,19 +217,19 @@ function Actions({ rule, meId, onDone }: { rule: Rule; meId: string; onDone: (r?
   const buttons: React.ReactNode[] = [];
   let explain: string | null = null;
   if (rule.status === 'draft') {
-    if (author) buttons.push(<button key="s" className={btnPrimary} disabled={!ready} onClick={() => act(`/rules/${rule.id}/submit`)}>Submit for approval</button>);
+    if (author) buttons.push(<button key="s" className={btnPrimary} disabled={!ready} onClick={() => act(`/rules/${rule.id}/submit`, {}, 'Submitting')}>Submit for approval</button>);
     else explain = `Only the author${rule.created_by_name ? `, ${rule.created_by_name},` : ''} can change or submit this draft.`;
   } else if (rule.status === 'pending_approval' && !approved) {
     buttons.push(
-      <button key="a" className={btnPrimary} disabled={!ready || author} onClick={() => act(`/rules/${rule.id}/approve`)}>Approve this version</button>,
-      <button key="r" className={btnSecondary} disabled={!ready || author} onClick={() => act(`/rules/${rule.id}/return`)}>Return to the author</button>,
+      <button key="a" className={btnPrimary} disabled={!ready || author} onClick={() => act(`/rules/${rule.id}/approve`, {}, 'Recording the approval')}>Approve this version</button>,
+      <button key="r" className={btnSecondary} disabled={!ready || author} onClick={() => act(`/rules/${rule.id}/return`, {}, 'Returning it')}>Return to the author</button>,
     );
     if (author) explain = 'You wrote this version, so another rule administrator approves or returns it (four eyes).';
   } else if (rule.status === 'pending_approval' && approved) {
-    buttons.push(<button key="act" className={btnPrimary} disabled={!ready} onClick={() => act(`/rules/${rule.id}/activate`, { effective_from: from || null })}>Activate</button>);
+    buttons.push(<button key="act" className={btnPrimary} disabled={!ready} onClick={() => act(`/rules/${rule.id}/activate`, { effective_from: from || null }, 'Activating')}>Activate</button>);
   } else {
-    buttons.push(<button key="n" className={btnPrimary} disabled={!ready} onClick={() => act('/rules', { from_rule_id: rule.id })}>Start a new version</button>);
-    if (rule.status === 'active') buttons.push(<button key="ret" className={btnSecondary} disabled={!ready} onClick={() => act(`/rules/${rule.id}/retire`)}>Retire</button>);
+    buttons.push(<button key="n" className={btnPrimary} disabled={!ready} onClick={() => act('/rules', { from_rule_id: rule.id }, 'Starting a new version')}>Start a new version</button>);
+    if (rule.status === 'active') buttons.push(<button key="ret" className={btnSecondary} disabled={!ready} onClick={() => act(`/rules/${rule.id}/retire`, {}, 'Retiring')}>Retire</button>);
   }
 
   return (
@@ -249,7 +251,12 @@ function Actions({ rule, meId, onDone }: { rule: Rule; meId: string; onDone: (r?
       )}
       {explain && <p className="text-sm text-ink-2">{explain}</p>}
       {error && <Notice kind="error">{error}</Notice>}
-      {buttons.length > 0 && <div className="flex flex-wrap gap-3">{buttons}</div>}
+      {buttons.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          {buttons}
+          {busy && <span className="text-sm text-ink-2" role="status">{doing}…</span>}
+        </div>
+      )}
     </section>
   );
 }

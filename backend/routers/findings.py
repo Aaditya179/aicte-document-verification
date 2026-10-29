@@ -66,8 +66,10 @@ def get_priority(application_id: str, user: AuthenticatedUser = Depends(require_
 @router.get("/applications/{application_id}/findings")
 def list_findings(application_id: str,
                         user: AuthenticatedUser = Depends(require_role(["institution", "reviewer", "rule_admin"]))):
-    application_for(user, application_id)
-    return casefile.findings_for(application_id, institution_view=user.role == "institution")
+    # The access check and the findings at once; the findings are returned only if the check passes
+    _, items = parallel(lambda: application_for(user, application_id),
+                        lambda: casefile.findings_for(application_id, institution_view=user.role == "institution"))
+    return items
 
 
 def _finding_for(user: AuthenticatedUser, finding_id: str) -> tuple[dict, dict]:
