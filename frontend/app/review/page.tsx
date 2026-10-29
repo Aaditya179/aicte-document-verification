@@ -117,7 +117,7 @@ export default function ReviewQueue() {
         <Empty>{filtered ? 'No application matches these filters.' : 'Nothing to review yet. Applications appear here once institutions submit them.'}</Empty>
       )}
       {rows && rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-sheet border border-rule bg-sheet shadow-[0_1px_2px_color-mix(in_srgb,var(--color-ink)_6%,transparent)]">
           <table className="w-full min-w-[56rem] border-collapse">
             <caption className="sr-only">Applications ordered by review priority</caption>
             <thead>
@@ -134,7 +134,7 @@ export default function ReviewQueue() {
                 const id = r.application.id;
                 return (
                   <React.Fragment key={id}>
-                    <tr className="hover:bg-sheet">
+                    <tr className="transition-colors hover:bg-paper">
                       <td className={td}>
                         <p className="font-serif text-2xl font-bold leading-none tabular-nums">{r.priority.score}</p>
                         <p className="mt-1"><Tag tone={BAND_TONE[r.priority.band]}>{r.priority.band}</Tag></p>

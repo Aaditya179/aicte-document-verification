@@ -3,6 +3,7 @@ import { Martel, Mukta } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import { BrandMark } from "@/components/Brand";
 
 // Both from Indian type foundries, and both carry Devanagari for a later Hindi interface
 const martel = Martel({ variable: "--font-martel", subsets: ["latin"], weight: ["400", "700", "800"] });
@@ -23,9 +24,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </Suspense>
         <main className="flex-1">{children}</main>
         {/* The spec's prototype notice (section 13), kept on every page in the footer rather than a strip on top */}
-        <footer className="space-y-1 border-t border-rule px-4 py-4 text-center text-xs text-ink-2">
-          <p>Decision support only. Final decision: Pending (authorised AICTE official).</p>
-          <p>Prototype demo. All institutions, people, documents and photos are fictional. Rules are illustrative, not official AICTE rules.</p>
+        <footer className="border-t border-rule bg-sheet">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-x-10 gap-y-3 px-4 py-5 text-xs text-ink-2 sm:px-6">
+            <p className="flex items-center gap-2 font-semibold text-ink">
+              <BrandMark className="size-4" />
+              Decision support only. Final decision: Pending (authorised AICTE official).
+            </p>
+            <p className="max-w-[60ch]">Prototype demo. All institutions, people, documents and photos are fictional. Rules are illustrative, not official AICTE rules.</p>
+          </div>
         </footer>
       </body>
     </html>

@@ -25,7 +25,7 @@ export default function InstitutionHome() {
       {!rows && !error && <Loading what="Loading your applications" />}
       {rows && rows.length === 0 && <Empty>No applications yet. Start one to upload its documents.</Empty>}
       {rows && rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-sheet border border-rule bg-sheet shadow-[0_1px_2px_color-mix(in_srgb,var(--color-ink)_6%,transparent)]">
           <table className="w-full min-w-[40rem] border-collapse">
             <thead>
               <tr>

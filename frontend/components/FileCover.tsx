@@ -9,23 +9,28 @@ export function FileCover({ detail, children }: { detail: ApplicationDetail; chi
   const { application: a, institution } = detail;
   return (
     <div className="ledger-rule pb-6">
-      <p className="text-sm text-ink-2">File number</p>
-      <h1 className="mt-1 text-3xl sm:text-4xl"><FileNumber code={a.code} /></h1>
-      <p className="mt-3 text-lg">
-        <span className="font-semibold">{institution.name}</span>
-        <span className="text-ink-2">, {institution.city}</span>
-        {institution.is_fictional && <span className="ml-2 align-middle"><Tag>Fictional</Tag></span>}
-      </p>
-      <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-4">
+      <div className="flex flex-wrap items-start justify-between gap-6">
+        <div className="min-w-0">
+          <p className="text-sm text-ink-2">File number</p>
+          <h1 className="mt-1 text-3xl tracking-[-0.01em] sm:text-[2.6rem]"><FileNumber code={a.code} /></h1>
+          <p className="mt-3 text-lg">
+            <span className="font-semibold">{institution.name}</span>
+            <span className="text-ink-2">, {institution.city}</span>
+            {institution.is_fictional && <span className="ml-2 align-middle"><Tag>Fictional</Tag></span>}
+          </p>
+        </div>
+        {/* Set like the decision field stamped on a file cover: the words carry it, and they never change */}
+        <p className="max-w-[15rem] rounded-control border border-ink/70 bg-sheet px-4 py-3 text-sm outline outline-1 outline-offset-2 outline-ink/25">
+          <span className="block text-xs text-ink-2">Final decision:</span>
+          <span className="font-serif font-bold leading-snug">Pending (authorised AICTE official)</span>
+        </p>
+      </div>
+      <dl className="mt-5 grid grid-cols-2 gap-x-8 gap-y-3 border-t border-rule pt-4 text-sm sm:grid-cols-4">
         <div><dt className="text-ink-2">Type</dt><dd className="font-semibold">{CATEGORY_LABEL[a.category]}</dd></div>
         <div><dt className="text-ink-2">Academic year</dt><dd className="font-semibold">{a.academic_year}</dd></div>
         <div><dt className="text-ink-2">Status</dt><dd className="font-semibold">{WORKFLOW_LABEL[a.workflow_status]}</dd></div>
         <div><dt className="text-ink-2">Review due</dt><dd className="font-semibold">{formatDate(a.review_deadline)}</dd></div>
       </dl>
-      <p className="mt-4 text-sm">
-        <span className="text-ink-2">Final decision: </span>
-        <span className="font-semibold">Pending (authorised AICTE official)</span>
-      </p>
       {children}
     </div>
   );

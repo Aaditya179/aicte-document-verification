@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { CircleAlert, CircleCheck, CircleDashed, Clock } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import {
   FINDING_STATUS_LABEL, SEVERITY_LABEL, humanize,
@@ -12,20 +13,25 @@ import { Empty, Loading, Mark, Notice, Placeholder, Skeleton, Tag, btnQuiet, btn
 
 // Green ink is kept for what a person did, so a passed status is written in plain ink
 const STATUS_TONE = {
-  ok: { bar: 'border-t-ink', text: 'text-ink' },
-  conflict: { bar: 'border-t-conflict', text: 'text-conflict' },
-  pending: { bar: 'border-t-pending', text: 'text-pending' },
-  neutral: { bar: 'border-t-rule-strong', text: 'text-ink-3' },
+  ok: { bar: 'border-t-ink', text: 'text-ink', Icon: CircleCheck },
+  conflict: { bar: 'border-t-conflict', text: 'text-conflict', Icon: CircleAlert },
+  pending: { bar: 'border-t-pending', text: 'text-pending', Icon: Clock },
+  neutral: { bar: 'border-t-rule-strong', text: 'text-ink-3', Icon: CircleDashed },
 } as const;
 
 /** The four statuses, side by side and never added together (build spec 7.3). */
-export function StatusCards({ statuses }: { statuses: StatusCard[] }) {
+export function StatusCards({ statuses, columns = 4 }: { statuses: StatusCard[]; columns?: 2 | 4 }) {
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {statuses.map((s) => (
-        <li key={s.key} className={`${sheet} border-t-[3px] p-4 ${STATUS_TONE[s.tone].bar}`}>
+    <ul className={`grid items-start gap-3 sm:grid-cols-2 ${columns === 4 ? 'lg:grid-cols-4' : ''}`}>
+      {statuses.map((s) => {
+        const { Icon } = STATUS_TONE[s.tone];
+        return (
+        <li key={s.key} className={`${sheet} border-t-[3px] p-4 shadow-[0_1px_2px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] ${STATUS_TONE[s.tone].bar}`}>
           <p className="text-sm text-ink-2">{s.label}</p>
-          <p className={`mt-1 font-serif text-lg font-bold leading-snug ${STATUS_TONE[s.tone].text}`}>{s.value}</p>
+          <p className={`mt-1 flex items-start gap-2 font-serif text-lg font-bold leading-snug ${STATUS_TONE[s.tone].text}`}>
+            <Icon aria-hidden="true" className="mt-1 size-[1.1rem] flex-none" strokeWidth={2.25} />
+            {s.value}
+          </p>
           {s.reasons.length > 0 && (
             <ul className="mt-2 space-y-1 text-sm text-ink-2">
               {s.reasons.slice(0, 4).map((r, i) => <li key={i}>{r}</li>)}
@@ -33,12 +39,12 @@ export function StatusCards({ statuses }: { statuses: StatusCard[] }) {
             </ul>
           )}
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
 
-/** The priority score worked out as a sum, so the reviewer sees how it was reached (build spec 7.4). */
 export function StatusCardsSkeleton() {
   return (
     <Skeleton what="Loading statuses">
@@ -83,6 +89,7 @@ export function PriorityLedgerSkeleton() {
   );
 }
 
+/** The priority score worked out as a sum, so the reviewer sees how it was reached (build spec 7.4). */
 export function PriorityLedger({ priority }: { priority: Priority }) {
   return (
     <div className={`${sheet} p-4`}>
@@ -505,7 +512,7 @@ export function FindingCard({ finding, docLabel, onCite, onChange, onReviewed, c
 }) {
   const unresolved = finding.status === 'open' || finding.status === 'evidence_requested';
   return (
-    <article className={`${sheet} space-y-4 p-4 ${finding.status === 'open' ? 'border-l-4 border-l-conflict' : ''}`} aria-labelledby={`f-${finding.id}`}>
+    <article className={`${sheet} space-y-4 p-4 shadow-[0_1px_2px_color-mix(in_srgb,var(--color-ink)_6%,transparent)] ${finding.status === 'open' ? 'margin-rule pl-9' : ''}`} aria-labelledby={`f-${finding.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h4 id={`f-${finding.id}`} className="font-serif text-base font-bold leading-snug">{finding.title}</h4>
         <Tag tone={STATUS_TAG[finding.status]}>{FINDING_STATUS_LABEL[finding.status]}</Tag>

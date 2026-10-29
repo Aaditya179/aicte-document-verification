@@ -139,3 +139,73 @@ body {
   background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--color-rule) 31px 32px);
   background-position: 0 14px;
 }
+
+/* Browser surfaces carry the look too: selection is the highlighter, controls take the ink */
+::selection {
+  background: var(--color-mark);
+  color: var(--color-ink);
+}
+
+html {
+  caret-color: var(--color-ink);
+  accent-color: var(--color-ink);
+  scrollbar-color: var(--color-rule-strong) var(--color-paper);
+}
+
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The ledger's margin: a double red line down the left of a sheet, as on a register page. Used for a
+ * finding that is still open and for the annotated sheet on the welcome page.
+ */
+.margin-rule {
+  position: relative;
+}
+
+.margin-rule::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.75rem;
+  width: 4px;
+  border-left: 1px solid var(--color-conflict);
+  border-right: 1px solid var(--color-conflict);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/*
+ * The welcome page's one moment of motion: highlighter strokes are drawn on as each specimen scrolls
+ * into view. Browsers without scroll-driven animation, and anyone asking for reduced motion, see the
+ * strokes already drawn.
+ */
+.mark-draw {
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .mark-draw {
+      animation: mark-draw linear both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 35%;
+    }
+  }
+}
+
+@keyframes mark-draw {
+  from { background-size: 0% 100%; }
+  to { background-size: 100% 100%; }
+}

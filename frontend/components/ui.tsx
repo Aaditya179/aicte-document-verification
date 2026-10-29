@@ -1,23 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { CircleAlert, CircleCheck, Clock, Info } from 'lucide-react';
 import { fetchApi } from '@/lib/api';
 import type { Role } from '@/lib/types';
 
-// Shared look. Colours come only from the tokens in globals.css.
-export const sheet = 'rounded-sheet border border-rule bg-sheet';
-export const card = `${sheet} p-5`;
-export const btnPrimary =
-  'inline-flex items-center justify-center gap-2 rounded-control bg-ink px-4 py-2 text-sm font-semibold text-sheet hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-50';
-export const btnSecondary =
-  'inline-flex items-center justify-center gap-2 rounded-control border border-ink bg-sheet px-4 py-2 text-sm font-semibold text-ink hover:bg-ink-wash disabled:cursor-not-allowed disabled:opacity-50';
-export const btnQuiet =
-  'inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-sm font-medium text-ink underline decoration-rule-strong underline-offset-4 hover:decoration-ink disabled:opacity-50';
-export const input =
-  'w-full rounded-control border border-rule-strong bg-sheet px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none';
-export const label = 'mb-1 block text-sm font-semibold text-ink';
-export const th = 'border-b border-rule-strong px-3 py-2 text-left text-xs font-semibold text-ink-2';
-export const td = 'border-b border-rule px-3 py-2.5 align-top text-sm';
+import { sheet, card, btnPrimary, btnSecondary, btnQuiet, input, label, th, td } from './styles';
+
+export { sheet, card, btnPrimary, btnSecondary, btnQuiet, input, label, th, td };
 
 export function PageShell({ title, description, actions, children, wide = false }: {
   title: React.ReactNode;
@@ -29,10 +19,10 @@ export function PageShell({ title, description, actions, children, wide = false 
 }) {
   return (
     <div className={`mx-auto w-full ${wide ? 'max-w-7xl' : 'max-w-5xl'} px-4 py-8 sm:px-6`}>
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div className="ledger-rule mb-8 flex flex-wrap items-end justify-between gap-4 pb-6">
         <div className="max-w-2xl">
-          <h1 className="font-serif text-3xl font-bold leading-tight">{title}</h1>
-          <p className="mt-2 text-ink-2">{description}</p>
+          <h1 className="font-serif text-3xl font-extrabold leading-[1.15] tracking-[-0.01em] sm:text-4xl">{title}</h1>
+          <p className="mt-3 max-w-[65ch] text-ink-2">{description}</p>
         </div>
         {actions}
       </div>
@@ -42,15 +32,16 @@ export function PageShell({ title, description, actions, children, wide = false 
 }
 
 export function Notice({ kind = 'info', children }: { kind?: 'info' | 'error' | 'success' | 'warning'; children: React.ReactNode }) {
-  const styles = {
-    info: 'border-rule-strong bg-sheet text-ink',
-    error: 'border-conflict bg-conflict-wash text-conflict',
-    success: 'border-officer bg-officer-wash text-officer',
-    warning: 'border-pending bg-pending-wash text-pending',
+  const { styles, Icon } = {
+    info: { styles: 'border-rule-strong bg-sheet text-ink', Icon: Info },
+    error: { styles: 'border-conflict/50 bg-conflict-wash text-conflict', Icon: CircleAlert },
+    success: { styles: 'border-officer/50 bg-officer-wash text-officer', Icon: CircleCheck },
+    warning: { styles: 'border-pending/50 bg-pending-wash text-pending', Icon: Clock },
   }[kind];
   return (
-    <div role={kind === 'error' ? 'alert' : 'status'} className={`rounded-sheet border-l-4 border px-4 py-3 text-sm ${styles}`}>
-      {children}
+    <div role={kind === 'error' ? 'alert' : 'status'} className={`flex gap-2.5 rounded-sheet border px-4 py-3 text-sm ${styles}`}>
+      <Icon aria-hidden="true" className="mt-0.5 size-4 flex-none" strokeWidth={2} />
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
