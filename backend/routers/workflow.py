@@ -199,7 +199,7 @@ def fulfil_evidence_request(request_id: str, body: Fulfil, user: AuthenticatedUs
 
 
 # ------------------------------------------------------------------------------------------------
-# Notifications (polled; ASSUMPTIONS.md D4)
+# Notifications (polled; CLAUDE.md, assumption D4)
 # ------------------------------------------------------------------------------------------------
 
 @router.get("/notifications")

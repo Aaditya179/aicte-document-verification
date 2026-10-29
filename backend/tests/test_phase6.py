@@ -9,8 +9,6 @@
 """
 import re
 from pathlib import Path
-import pytest
-from core.db import db
 from services import audit
 from services.validation import CHECKS
 
@@ -94,7 +92,7 @@ def test_audit_verify_detects_tampered_event(fake):
     """When an audit row hash is altered, audit.verify_chain detects the broken link."""
     # Seed a few events
     e1 = audit.record(None, "application_seeded", "application", "app-1", "app-1", {"seq": 1})
-    e2 = audit.record(None, "validation_run", "application", "app-1", "app-1", {"seq": 2})
+    audit.record(None, "validation_run", "application", "app-1", "app-1", {"seq": 2})
 
     # Chain should be valid initially
     assert audit.verify_chain()["ok"] is True

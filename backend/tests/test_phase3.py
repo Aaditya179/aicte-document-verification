@@ -3,8 +3,7 @@ copy, and the workflow routes: room table, confirming and correcting a value, ev
 notifications, the priority queue and the cross-institution list."""
 import io
 import random
-from dataclasses import replace
-from datetime import date, datetime
+from datetime import date
 
 from PIL import Image, ImageDraw
 

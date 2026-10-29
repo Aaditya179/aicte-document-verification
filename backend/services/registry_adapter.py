@@ -23,7 +23,7 @@ DEFAULT_MODE = "unavailable"
 SOURCE = "MOCK issuer registry"
 
 # Which document types an issuer registry holds, the number it is looked up by, and the values it
-# returns to compare (ASSUMPTIONS.md A30)
+# returns to compare (CLAUDE.md, assumption A30)
 REGISTRY_DOCUMENTS: dict[str, dict] = {
     "approval_certificate": {"issuer": "AICTE approval register", "key": "certificate_no",
                              "fields": ["institution_code", "issue_date", "expiry_date"]},

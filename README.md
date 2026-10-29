@@ -1,296 +1,211 @@
-# ProofPath AI: Trust-Calibrated Document Verification & Regulatory Compliance
+# ProofPath AI
 
-> **Smart India Hackathon 2026** · Problem Statement **SIH26261**  
-> **Theme:** AI-Powered Application Validation, Document Authentication, and Regulatory Compliance Verification for AICTE.  
-> **Core Architecture:** Evidence-First Validation Layer · 4 Trust-Calibrated Statuses · Deterministic Rule Engine · Cross-Institution Linkage · Cryptographic Audit Trail.
+> **Smart India Hackathon 2026**, problem statement **SIH26261**: AI-powered application validation, document authentication and regulatory compliance verification for AICTE.
 
----
+ProofPath AI is an evidence-first validation layer beside the AICTE approval workflow. It reads every document in an application, checks the values against versioned rules and against each other, compares them across institutions, and gives the reviewer a case file in which every finding links to its document, page and value. The decision always stays with the authorised AICTE official.
 
-### 🌐 Live Deployment
+- **Full report** (problem statement, every feature, benefits, limitations, future scope): [`PROJECT_REPORT.md`](PROJECT_REPORT.md)
+- **Developer notes, assumptions and the build spec:** [`CLAUDE.md`](CLAUDE.md)
 
-| Service | Live Link | Description |
-| :--- | :--- | :--- |
-| **Frontend Web App** | **[proofpath-frontend.onrender.com/welcome](https://proofpath-frontend.onrender.com/welcome)** | Interactive Next.js 16 Web Application with role-based guided paths |
-| **Backend REST API** | **[proofpath-api-bcuv.onrender.com](https://proofpath-api-bcuv.onrender.com)** | FastAPI service running deterministic verification engine & PyMuPDF forensics |
-| **API Documentation** | **[proofpath-api-bcuv.onrender.com/docs](https://proofpath-api-bcuv.onrender.com/docs)** | Interactive Swagger / OpenAPI Specification |
-| **Health Check** | **[proofpath-api-bcuv.onrender.com/api/v1/health](https://proofpath-api-bcuv.onrender.com/api/v1/health)** | Live system status & database connectivity check |
+## Live deployment
 
----
+| Service | Link |
+| :--- | :--- |
+| Web application | [proofpath-frontend.onrender.com/welcome](https://proofpath-frontend.onrender.com/welcome) |
+| API | [proofpath-api-bcuv.onrender.com/api/v1](https://proofpath-api-bcuv.onrender.com/api/v1) |
+| API documentation | [proofpath-api-bcuv.onrender.com/docs](https://proofpath-api-bcuv.onrender.com/docs) |
+| Health check | [proofpath-api-bcuv.onrender.com/api/v1/health](https://proofpath-api-bcuv.onrender.com/api/v1/health) |
 
-## 1. Executive Summary & Problem Context
-
-Every year, thousands of technical institutions submit regulatory approval applications to AICTE accompanied by tens of thousands of scanned certificates, land records, fire NOCs, affidavits, faculty rolls, floor plans, and geo-tagged infrastructure photos. Traditional validation methods face three major vulnerabilities:
-1. **Opaque "Fraud Scores":** Black-box ML models output ambiguous risk numbers without pointing to exact textual or structural evidence.
-2. **Siloed Inspection:** Applications are validated in isolation, allowing **ghost faculty** (professors listed simultaneously across multiple colleges), **reused campus photos** (same lab or classroom submitted under different college codes), and **reused land survey numbers** to slip past unnoticed.
-3. **Audit Vulnerability:** Scrutiny actions and rule exceptions lack a tamper-evident, cryptographically verifiable paper trail.
-
-### The ProofPath AI Solution
-ProofPath AI operates as an **evidence-first scrutiny acceleration layer** alongside the AICTE approval workflow. It extracts claims from every document, checks them against versioned deterministic rules and against each other, compares claims across all institutions in the registry, verifies digital signatures and PDF metadata, and compiles a comprehensive **Case File** where every finding links directly to the cited page and highlighted text.
-
-> **Decision Support Only:** The administrative decision field is strictly constrained to `"Pending (authorised AICTE official)"` at the database level. ProofPath AI surfaces verifiable evidence and preliminary indicators—the final administrative determination always remains with authorised human officials.
+The free hosting sleeps when idle, so the first request after a pause can take up to a minute.
 
 ---
 
-## 2. Key Architectural Differentiators
+## 1. Why it is built this way
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                 ProofPath AI                                    │
-│                                                                                 │
-│   ┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐   │
-│   │   Integrity Layer   │   │  Consistency Engine │   │ Authenticity Layer  │   │
-│   │ Magic-byte, SHA-256 │   │ Cross-Document Pair │   │ pyHanko Trust Store │   │
-│   │ Duplicate file hash │   │ Cross-Institution   │   │ MOCK Issuer Registry│   │
-│   └──────────┬──────────┘   └──────────┬──────────┘   └──────────┬──────────┘   │
-│              │                         │                         │              │
-│              └─────────────────┬───────┴─────────────────────────┘              │
-│                                │                                                │
-│                 ┌──────────────▼──────────────┐                                 │
-│                 │   4 Independent Statuses    │                                 │
-│                 │  • Integrity                │                                 │
-│                 │  • Consistency              │                                 │
-│                 │  • Authenticity             │                                 │
-│                 │  • Compliance               │                                 │
-│                 └──────────────┬──────────────┘                                 │
-│                                │                                                │
-│                 ┌──────────────▼──────────────┐                                 │
-│                 │  Append-Only Audit Chain    │                                 │
-│                 │  SHA-256 Hash Chain Trigger │                                 │
-│                 │  Tamper-Evident Genesis Log │                                 │
-│                 └─────────────────────────────┘                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+Scrutiny of AICTE applications is manual, slow and done one file at a time. The same particular appears in several documents and is compared by eye; a faculty member, photo or land survey number reused by two institutions cannot be seen within one file; and it is hard to show later which page and which rule a decision rested on. A single risk score does not help, because it does not say what is wrong or where.
 
-1. **Four Trust-Calibrated Statuses (Never a Single Fraud Score):**
-   - **Integrity:** Magic-byte validation, PDF parsing integrity, document page limits, SHA-256 duplicate detection.
-   - **Consistency:** Intra-application comparison pairs (e.g. form declared count vs faculty list), date chronological order, and cross-institution flags.
-   - **Authenticity:** Cryptographic PDF digital signature verification (PKI trust store), PDF incremental revision metadata forensics, and issuer registry matching.
-   - **Compliance:** Statutory document completeness, active validity on the as-of date, built-up area floor plan arithmetic, and campus photo evidence.
-2. **Cross-Institution Verification Engine:**
-   - **Ghost Faculty Detection (C8):** Identifies identical personnel claimed across institutions using RapidFuzz token-sort name similarity ($\ge 0.90$), masked government identifier matching, identical qualifications, and overlapping employment periods.
-   - **Photo Reuse Detection (C9):** Computes a 64-bit perceptual hash (`imagehash.phash`) for infrastructure photos, detecting reused or resized/re-encoded lab and classroom photos across institutions with Hamming distance $\le 8$.
-   - **Reused Identifier Tracking (C7):** Flags duplicate fire NOC numbers, approval certificates, and land survey parcels used in more than one application.
-3. **Deterministic Rules as Versioned Data:**
-   - Pure Python execution—never delegated to an LLM. Thresholds, parameters, and clauses live in database tables with a full lifecycle (`draft` $\to$ `pending_approval` $\to$ `active` $\to$ `retired`).
-   - **Mandatory Four-Eyes Approval:** A rule author cannot approve their own rule.
-   - **Impact Preview:** Dry-run simulation of draft rules against active applications before activation.
-4. **Append-Only Cryptographic Audit Trail:**
-   - Every validation run, field confirmation, reviewer action, rule modification, and configuration change is hashed in sequence (`SHA-256(prev_hash | fields | timestamp)`).
-   - Database triggers strictly block `UPDATE`, `DELETE`, and `TRUNCATE` operations on `audit_events`.
-   - Built-in one-click verification endpoint (`GET /audit/verify`) re-evaluates the entire hash chain from the genesis block.
+ProofPath follows a few fixed principles:
 
----
+1. **Decision support only.** The administrative decision always reads "Pending (authorised AICTE official)"; nothing can change it.
+2. **Four separate statuses, never one score:** Integrity, Consistency, Authenticity, Compliance.
+3. **Checks are plain code, never an AI model.** The same documents and rules always give the same result.
+4. **AI only drafts or suggests, and a person decides.** Every AI output is grounded in the record, labelled, and has a rule-based fallback.
+5. **Uncertain values go to a person**, never guessed.
+6. **Findings say what differs and where**, never what it implies.
+7. **Nothing is deleted.** Every action is in a hash-chained audit trail.
+8. **Institutions see only their own data.**
 
-## 3. Complete Verification Check Catalogue (C1 to C15)
+## 2. Features
 
-Every check runs deterministically without hallucinations:
+**Reading documents**
+- Signed uploads to a private bucket, a SHA-256 fingerprint and a file type check for every file, and versions when a document is replaced.
+- Text from PDFs, OCR for scans, and reading patterns per document type that accept the many ways a label is written.
+- Values normalised across date formats, units (sq m and sq ft) and Indian digit grouping. Ambiguous dates such as 03/08/2025 are marked for a person.
+- A faculty list reader for line, headed-table and positional-table layouts, masking identity numbers to the last four digits.
+- **AI suggestions for missing values:** when no pattern finds a required value, an AI model names the line it is on. It is kept only if that line is really on the page and the value reads as its type, and it waits for a person to confirm it.
 
-| Check ID | Finding Key | Severity | Logic & Verification Method |
+**Checking**
+- Fifteen deterministic checks (below), driven by versioned rules. Findings have stable keys, so reviewer actions survive re-runs, and they close automatically when the condition no longer holds.
+- **Cross-institution engine:** reused certificate, NOC and land survey numbers; faculty listed by two institutions for overlapping periods; photos reused across institutions, even after resizing.
+- **Authenticity:** PDF signatures verified against a trust store, file metadata indicators, a MOCK issuer registry, and manual confirmation with the issuer. Each method keeps its own record.
+
+**Reviewing**
+- A priority queue that shows the sum behind each score.
+- A case page with four status cards, findings within and across institutions, every cited value highlighted and opening the document at its page, conflicting values and photos side by side, and resolve, dismiss or request evidence, always with a reason.
+- Confirm or correct any value read; the original is kept and validation reruns.
+- **Why this rule:** each finding shows its rule and the regulation clauses behind it (clauses linked to the rule first, then the closest by keyword search). A reviewer can ask for a **draft explanation** of two or three sentences. It is checked before it is shown: every number must come from the record, only the retrieved clauses may be cited, and no wording may state a conclusion. Otherwise a template from the record is shown. It is labelled Draft and is not saved.
+- A printable case file with snapshots, and a searchable audit log with a one-click chain check.
+
+**For institutions**
+- An application wizard with a live preview of the values read from each document.
+- A pre-flight check before submitting, linking each item to its fix. It stores nothing and never shows cross-institution results.
+- Evidence requests answered with a note and a replacement document, after which validation reruns.
+
+**Governance**
+- Rules as data with a draft, approval, active and retired lifecycle. **Four-eyes approval:** the author cannot approve their own rule.
+- An impact preview of a draft rule over existing applications, writing nothing.
+- Draft a rule from pasted regulation text (AI, grounded in the quoted clause, with a rule-based fallback). It is saved as a draft only.
+- Audited settings: the as-of date, priority weights, checklists, document types, reading patterns, the signature trust store, the MOCK registry mode and the regulation clause library.
+
+## 3. Check catalogue
+
+| Check | Finding | Severity | What it finds |
 | :---: | :--- | :---: | :--- |
-| **C1** | `MISSING_DOCUMENT` | High | Required category documents minus uploaded, integrity-passed documents. |
-| **C2** | `EXPIRED_DOCUMENT` | High | Document `expiry_date` prior to the configured as-of review date. |
-| **C3** | `DATE_ORDER_INVALID` | Medium | Document `expiry_date` earlier than its recorded `issue_date`. |
-| **C4** | `DATE_CONFLICT`, `ID_MISMATCH`, `COUNT_CONFLICT` | Medium | Intra-application discrepancy across document pairs (e.g., Form vs Certificate). |
-| **C5** | `FIELD_NEEDS_CONFIRMATION` | Low | Low OCR confidence ($< 0.80$), ambiguous dates (`03/08/2026`), or missing fields. |
-| **C6** | `DUPLICATE_FILE` | Low | Distinct documents within the same application sharing identical SHA-256 hashes. |
-| **C7** | `REUSED_IDENTIFIER` | Medium | Reused certificate number, fire NOC, or land survey parcel across institutions. |
-| **C8** | `GHOST_FACULTY` | Medium | RapidFuzz token-sort similarity $\ge 0.90$ + identical qualification + overlapping tenure. |
-| **C9** | `PHOTO_REUSE` | Medium | 64-bit perceptual hash Hamming distance $\le 8$ across distinct institutions. |
-| **C10** | `INFRA_EVIDENCE_MISSING` | High | Missing mandatory photo evidence categories (lab, classroom, library, floor plan). |
-| **C11** | `AREA_MISMATCH`, `AREA_BELOW_MINIMUM` | Medium/High | Sum of room table dimensions vs declared area (tolerance 1%) and statutory minimum. |
-| **C12** | `PHOTO_METADATA` | Low | Photo EXIF capture date older than 12 months relative to review deadline. |
-| **C13** | `SIGNATURE_INVALID` | High/Medium | Digital signature validation via pyHanko (`valid`, `invalid`, `untrusted_chain`, `unsigned`). |
-| **C14** | `METADATA_ANOMALY` | Low | Incremental revision added after signature, or creation date later than modification date. |
-| **C15** | `REGISTRY_MISMATCH` | High | Direct discrepancy between extracted values and the issuer registry record. |
+| C1 | `MISSING_DOCUMENT` | High | A document required for the category is missing or failed its file check |
+| C2 | `EXPIRED_DOCUMENT` | High | Validity ended before the as-of date |
+| C3 | `DATE_ORDER_INVALID` | Medium | Expiry date before issue date in one document |
+| C4 | `DATE_CONFLICT`, `ID_MISMATCH`, `COUNT_CONFLICT` | Medium | The same particular differs between two documents of one application |
+| C5 | `FIELD_NEEDS_CONFIRMATION` | Low | A required value is low-confidence, ambiguous, suggested by AI or not found |
+| C6 | `DUPLICATE_FILE` | Low | The same file uploaded as two documents |
+| C7 | `REUSED_IDENTIFIER` | Medium | A certificate, NOC or land survey number also in another institution's application |
+| C8 | `GHOST_FACULTY` | Medium | A person listed by two institutions for overlapping periods (masked ID, or name similarity of at least 0.90 with the same qualification) |
+| C9 | `PHOTO_REUSE` | Medium | Perceptual hash distance of 8 or less to a photo from another institution |
+| C10 | `INFRA_EVIDENCE_MISSING` | High | No laboratory, classroom or library photo, or no floor plan |
+| C11 | `AREA_MISMATCH`, `AREA_BELOW_MINIMUM` | Medium, high | Room table against declared area (tolerance) and the minimum area |
+| C12 | `PHOTO_METADATA` | Low | Photo taken longer before the as-of date than the rule allows |
+| C13 | `SIGNATURE_INVALID` | High, medium | Signature invalid or untrusted, or missing where the document type requires one |
+| C14 | `METADATA_ANOMALY` | Low | Modified after signing, or created after it was modified (indicator only) |
+| C15 | `REGISTRY_MISMATCH` | High | The issuer registry (MOCK) differs from the document |
 
----
+## 4. Evaluation
 
-## 4. Benchmark Evaluation Results
-
-Evaluated against the synthetic ground truth dataset (`seed/ground_truth.json`) with fixed as-of date `01/11/2026` across **44 submitted applications from 30 fictional institutions**:
+On the synthetic dataset (`backend/seed/ground_truth.json`): **44 applications from 30 fictional institutions**, as-of date 01/11/2026.
 
 ```
-Measured on a synthetic dataset; not validated on real AICTE records.
-
-Ground truth: 44 applications, as-of date 2026-11-01.
-
 True positives:  22
 False positives: 0
 False negatives: 0
 Precision 1.000   Recall 1.000   F1 1.000
-
-By finding type (True Positives / False Positives / False Negatives):
-  AREA_MISMATCH                  1 /   0 /   0
-  COUNT_CONFLICT                 1 /   0 /   0
-  DATE_CONFLICT                  1 /   0 /   0
-  DATE_ORDER_INVALID             1 /   0 /   0
-  DUPLICATE_FILE                 1 /   0 /   0
-  EXPIRED_DOCUMENT               1 /   0 /   0
-  FIELD_NEEDS_CONFIRMATION       1 /   0 /   0
-  GHOST_FACULTY                  2 /   0 /   0
-  ID_MISMATCH                    1 /   0 /   0
-  INFRA_EVIDENCE_MISSING         1 /   0 /   0
-  METADATA_ANOMALY               2 /   0 /   0
-  MISSING_DOCUMENT               1 /   0 /   0
-  PHOTO_METADATA                 1 /   0 /   0
-  PHOTO_REUSE                    2 /   0 /   0
-  REUSED_IDENTIFIER              2 /   0 /   0
-  SIGNATURE_INVALID              3 /   0 /   0
-
-Must not be flagged: 23 of 23 clean applications had zero findings.
-  INST-1001-2026-27-01 (clean control): not flagged
-  INST-2018-2027-28-01 (lookalike faculty): not flagged
+Must not be flagged: 23 of 23, including the clean control and a look-alike faculty pair
 ```
 
-Run evaluation locally:
+These figures come from scenarios we designed. They show the checks behave as intended; they are not a measurement on real AICTE records. Full output: `backend/evaluation.txt`. To run it (with the API running):
+
 ```bash
 cd backend && PYTHONPATH=. .venv/bin/python -m scripts.evaluate
 ```
 
----
+## 5. Two-minute demo
 
-## 5. Quick Guided Demo Walkthrough (2-Minute Evaluator Path)
+Open [the welcome page](https://proofpath-frontend.onrender.com/welcome) and click a demo account. Every account uses the password **`password123`**.
 
-Access the live web app: **[proofpath-frontend.onrender.com/welcome](https://proofpath-frontend.onrender.com/welcome)**
-
-Password for all seeded demo accounts: **`password123`**
-
-| Role | Email | Scope & Purpose |
+| Role | Email | Use it to |
 | :--- | :--- | :--- |
-| **Institution User** | `institution@proofpath.demo` | **Aarohan Institute of Technology:** uploads documents, manages room dimensions, runs self-service pre-flight checks. |
-| **Second Institution** | `institution2@proofpath.demo` | **Vindhya College of Engineering:** proves strict tenant data isolation (institutions never see another's files). |
-| **Scrutiny Reviewer** | `reviewer@proofpath.demo` | **AICTE Scrutiny Officer:** reviews prioritized queue, examines cited document pages, confirms/corrects OCR fields, acts on findings. |
-| **Rule Administrator 1** | `ruleadmin@proofpath.demo` | **Regulatory Policy Admin:** authors rules, triggers dry-run impact previews, modifies extraction templates. |
-| **Rule Administrator 2** | `ruleadmin2@proofpath.demo` | **Second Regulatory Officer:** satisfies mandatory four-eyes approval for rule activation. |
+| Institution | `institution@proofpath.demo` | Prepare and submit an application for Aarohan Institute of Technology, run pre-flight, answer requests |
+| Second institution | `institution2@proofpath.demo` | See that institutions never see each other's data |
+| Scrutiny reviewer | `reviewer@proofpath.demo` | Work the queue, read findings and evidence, act on findings |
+| Rule administrator | `ruleadmin@proofpath.demo` | Write rules, preview their impact, change settings, add clauses |
+| Second rule administrator | `ruleadmin2@proofpath.demo` | Approve a rule the first one wrote (four-eyes) |
 
-### Step-by-Step Walkthrough:
+1. **Institution:** open the wizard (`/institution/applications/new`), upload documents and watch the values being read, enter the room table, and run pre-flight.
+2. **Reviewer:** open the queue (`/review`) and an application. Look at the four statuses, click a highlighted value to open its page, compare conflicting values and photos side by side, and open **Why this rule** on a finding, then **Draft an explanation**.
+3. **Reviewer:** confirm or correct a value marked for confirmation, resolve or dismiss a finding with a reason, check a document in the MOCK issuer registry, and open the case file.
+4. **Rule administrator:** draft a rule, run its impact preview, and submit it; then approve it as the second administrator.
+5. **Audit** (`/audit`): search the log and click **Check audit chain**.
 
-1. **Step 1: Welcome Screen (`/welcome`)**
-   - Click any role badge to log in instantly, or test sign-in via email/password.
-2. **Step 2: Applicant Wizard (`/institution/applications/new`)**
-   - Walk through the preparation wizard: upload documents with live extraction feedback, enter room dimensions, run pre-flight check, and submit.
-3. **Step 3: Reviewer Queue & Case File (`/review`)**
-   - Open the prioritized queue sorted by transparent risk composition and statutory deadlines.
-   - Click into an application (`/review/[id]`) to view:
-     - The **4 Status Cards** (Integrity, Consistency, Authenticity, Compliance).
-     - **Side-by-side evidence:** Compare conflicting values with the PDF document opened directly to the cited page and line.
-     - **Across-institution matches:** Inspect ghost faculty with overlapping tenure and photo perceptual hash matches side by side.
-     - **Issuer Verification:** Test the MOCK issuer registry and verify digital signature chains.
-     - **Action Log:** Resolve or dismiss findings with mandatory recorded justifications.
-   - Click **Print / Save Case File** (`/review/[id]/casefile`) for an official snapshot with hash verification.
-4. **Step 4: Governance & Impact Preview (`/admin/rules`)**
-   - View illustrative rules and version history.
-   - Create a rule draft and execute an **Impact Preview** to see exactly how many open applications would be affected *before* activating the rule.
-   - Test four-eyes approval: sign in as `ruleadmin2` to approve a rule created by `ruleadmin`.
-5. **Step 5: Cryptographic Audit Explorer (`/audit`)**
-   - Search the system-wide audit log by actor, entity, or event type.
-   - Click **Check audit chain** to verify all SHA-256 hashes against genesis.
+## 6. Technology
 
----
+| Part | Technology |
+| :--- | :--- |
+| Web application | Next.js 16 (App Router, Cache Components), React 19, TypeScript, Tailwind CSS 4 |
+| API | FastAPI, Pydantic 2, Python 3.12 |
+| Database, sign-in, storage | Supabase: PostgreSQL in its own `proofpath` schema, Auth with TOTP, private bucket `proofpath-documents` |
+| Documents | PyMuPDF, Tesseract (pytesseract), Pillow, imagehash, RapidFuzz |
+| Signatures | pyHanko |
+| AI drafting | Groq, always with a rule-based fallback |
+| Hosting | Render (`render.yaml`) |
 
-## 6. Technology Stack & Design System
+The look is ProofPath's own: register paper, blue-black ink, green ink only for what a person did, red pencil for conflicts and a highlighter on every value cited from a document, with Martel and Mukta type. The tokens are in `frontend/app/globals.css` and described in `CLAUDE.md` (Design).
 
-- **Frontend:** Next.js 16 (App Router, Turbopack, Cache Components, React 19, TypeScript Strict).
-- **Styling:** Tailwind CSS 4 with ProofPath's bespoke institutional paper-and-ink design tokens:
-  - Register Paper (`bg-paper`), Blue-Black Ink (`text-ink`), Red Pencil Conflict (`text-conflict`), Officer Action Green (`text-officer`), Highlighter Evidence (`bg-mark`).
-  - Typography: **Martel** (headings) & **Mukta** (interface), supporting Latin and Devanagari.
-- **Backend:** FastAPI, Python 3.12, Uvicorn, Pydantic v2.
-- **Document Processing & Forensics:**
-  - `PyMuPDF`: Vector text extraction, coordinate bounding boxes, incremental revision parsing.
-  - `pytesseract` & `Pillow`: Optical character recognition fallback for scanned records.
-  - `imagehash`: 64-bit perceptual hashing (`pHash`) and Hamming distance calculation.
-  - `rapidfuzz`: Token-sort ratio fuzzy matching for name deduplication.
-  - `pyHanko`: X.509 PKI trust store certificate chain validation for PDF digital signatures.
-- **Platform & Database:** Supabase Postgres (`proofpath` schema isolation, `pgcrypto`), Supabase Auth, Private Storage (`proofpath-documents`).
+## 7. Local setup
 
----
+### Database (Supabase)
 
-## 7. Local Development Setup (15 Minutes)
+There is no direct database connection; run each migration in the Supabase SQL editor, in order:
 
-### 1. Database Setup (Supabase)
-In your Supabase project's SQL editor, execute the migrations in order:
-1. `supabase/migrations/0001_proofpath_schema.sql` (schema, tables, audit append/verify functions)
-2. `supabase/migrations/0002_rls.sql` (lockdown: denies direct browser table access)
-3. `supabase/migrations/0003_seed_reference.sql` (document types, checklists, illustrative rules C1–C14)
-4. `supabase/migrations/0004_phase3.sql` (R-GHOST-01 v2 similarity 0.90)
-5. `supabase/migrations/0005_phase4.sql` (R-REG-01 issuer registry check)
+| Migration | What it adds |
+| :--- | :--- |
+| `0001_proofpath_schema.sql` | Schema, tables, audit append and verify functions |
+| `0002_rls.sql` | Lockdown: row-level security on, no browser access |
+| `0003_seed_reference.sql` | Categories, document types, checklists, reading patterns, illustrative rules |
+| `0004_phase3.sql` | R-GHOST-01 version 2 (name similarity 0.90) |
+| `0005_phase4.sql` | R-REG-01, the issuer registry check |
+| `0006_label_variants.sql`, `0007_label_variants_2.sql` | More ways a label can be written |
+| `0008_ai_suggested_values.sql` | Allows values suggested by AI |
+| `0009_regulation_clauses.sql` | The regulation clause library and its illustrative clauses |
 
-*Under **Project Settings → Data API → Exposed schemas**, add `proofpath` and save.*
+Then add `proofpath` under **Project Settings → Data API → Exposed schemas**.
 
-### 2. Backend Setup
+### Backend (port 8001)
 
 ```bash
 cd backend
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.example .env          # fill in Supabase and Groq values
 
-# Seed accounts, sample files, and 44 test applications
-python -m seed.demo
-python -m seed.samples
-python -m seed.seed
+PYTHONPATH=. python -m seed.demo      # five demo accounts (@proofpath.demo only)
+PYTHONPATH=. python -m seed.samples   # sample files to upload by hand
+PYTHONPATH=. python -m seed.seed      # the 44-application dataset
 
-# Run the 148 automated tests
-PYTHONPATH=. pytest -q
-
-# Start the API server on port 8001
-uvicorn main:app --reload --port 8001
+PYTHONPATH=. uvicorn main:app --reload --port 8001
 ```
 
-### 3. Frontend Setup
+### Frontend (port 3001)
 
 ```bash
 cd frontend
 npm install
 cp .env.example .env.local
-
-# Run TypeScript check and production build
-npx tsc --noEmit && npm run build
-
-# Start the Next.js development server on port 3001
 npm run dev
 ```
 
-Visit `http://localhost:3001` in your browser.
+Open http://localhost:3001. The ports differ from Nirikshan's (8000 and 3000), so both run side by side.
 
----
-
-## 8. Automated Test Suite
-
-ProofPath AI includes a comprehensive test suite of **148 automated tests** covering all 15 checks, role-based access, security constraints, and data integrity:
+## 8. Tests
 
 ```bash
-cd backend && PYTHONPATH=. .venv/bin/pytest -v
+cd backend && PYTHONPATH=. .venv/bin/pytest -q          # 202 tests
+cd frontend && npx tsc --noEmit && npx eslint . && npm run build
 ```
 
-Tests include:
-- `test_access.py`: Verifies multi-tenant isolation (institutions cannot read another's files or cross-institution findings).
-- `test_upload_pipeline.py`: Validates magic bytes, SHA-256 hashing, PyMuPDF extraction, and version supersession.
-- `test_validation.py`: Tests passing and failing conditions for checks C1 to C12.
-- `test_phase3.py`: Validates cross-institution ghost faculty, photo reuse, and room area checks.
-- `test_phase4.py`: Tests mock registry adapter states (`unavailable`, `match`, `mismatch`) and check C15.
-- `test_phase5.py`: Tests digital signature validation (pyHanko), PDF metadata forensics (C13, C14), and four-eyes rule approvals.
-- `test_phase6.py`: Enforces non-negotiable guardrails:
-  - **Forbidden Words Test:** Confirms `fraud`, `forged`, and `fake` never appear in code, UI, or findings.
-  - **Design Token Compliance:** Verifies components strictly use the defined theme tokens.
-  - **Administrative Immutability:** Asserts `admin_status` cannot be altered from `'pending'`.
-  - **Audit Tamper Detection:** Verifies `audit.verify_chain()` detects any altered hash link.
+| File | Covers |
+| :--- | :--- |
+| `test_access.py` | Isolation between institutions and roles |
+| `test_upload_pipeline.py` | File checks, fingerprints, reading, versions |
+| `test_normalise_extraction.py`, `test_label_variants.py`, `test_faculty_tables.py` | Value normalisation, label variants, faculty tables |
+| `test_validation.py`, `test_review_flow.py` | Checks C1 to C6, statuses, priority, reviewer actions |
+| `test_phase3.py` | Cross-institution checks, infrastructure and area, evidence requests |
+| `test_phase4.py` | MOCK registry, C15, manual checks, pre-flight |
+| `test_phase5.py` | Signatures and metadata on real signed PDFs, rule lifecycle and four-eyes approval, impact preview, rule drafting, settings |
+| `test_suggest.py`, `test_clauses.py` | AI suggestions and draft explanations: only grounded output gets through |
+| `test_phase6.py` | Forbidden words, design tokens only, the decision stays pending, audit tamper detection, every check present |
+| `test_repo_secrets.py`, `test_health.py` | No secrets in the repository, health endpoint |
 
----
+## 9. Deployment
 
-## 9. Render Deployment Architecture
-
-Both services are configured via **`render.yaml`** (Render Blueprint):
-- **Backend Web Service (`proofpath-api`):** Python 3.12 native runtime running `uvicorn main:app --host 0.0.0.0 --port $PORT` with healthcheck `/api/v1/health`.
-- **Frontend Web Service (`proofpath-frontend`):** Node 20 runtime running `next start` on `$PORT`.
-
-To deploy:
-1. Connect this repository to **[Render](https://dashboard.render.com/)** as a **Blueprint**.
-2. Supply your Supabase and Groq credentials in the prompted environment variables.
-3. Render automatically provisions, builds, and deploys both services with zero manual configuration.
-
----
+Both services are defined in `render.yaml` as a Render Blueprint: `proofpath-api` (Python, `uvicorn main:app`, health check `/api/v1/health`) and `proofpath-frontend` (Node, `next start`). Connect the repository as a Blueprint and supply the Supabase and Groq values when asked. Pushes to `main` deploy automatically.
 
 ## 10. Disclaimer
 
-*This prototype is developed for the Smart India Hackathon 2026 (Problem Statement SIH26261). All institutions, individual names, academic records, and photos in the test dataset are synthetic and fictional. All regulatory rules implemented are illustrative and do not represent official AICTE regulations. Issuer registry checks are simulated via a mock adapter. ProofPath AI provides preliminary decision-support indicators only; final administrative decisions rest exclusively with authorised AICTE officials.*
+This prototype was built for the Smart India Hackathon 2026 (SIH26261). Every institution, person, document and photo in it is fictional. The rules and regulation clauses are illustrative and are not official AICTE norms or text. The issuer registry is a MOCK. ProofPath AI gives preliminary decision-support indicators only; the decision on every application rests with the authorised AICTE official.

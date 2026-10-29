@@ -175,7 +175,7 @@ def scenarios() -> list[tuple[str, str, AppSpec, list[str]]]:
     add("photo_reuse", f"Its lab photo is {app_code(photo_a)}'s, resized to 1000 x 667 and re-saved at quality 70", photo_b,
         [f"PHOTO_REUSE|{{code}}|{app_code(photo_a)}"])
 
-    # Two new institutions give the same land survey number (ASSUMPTIONS.md A1)
+    # Two new institutions give the same land survey number (CLAUDE.md, assumption A1)
     land_a = clean_spec(35, inst["INST-2021"], "new_institution")
     land_b = replace(clean_spec(36, inst["INST-2022"], "new_institution"), survey_no=land_a.survey_no)
     add("reused_identifier", f"Survey number {land_a.survey_no} also given by {app_code(land_b)}", land_a,

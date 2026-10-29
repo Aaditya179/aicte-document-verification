@@ -1,4 +1,4 @@
--- ProofPath AI: row-level security (build spec section 5.2, as adapted in ASSUMPTIONS.md D4).
+-- ProofPath AI: row-level security (build spec section 5.2, as adapted in CLAUDE.md, assumption D4).
 --
 -- The browser never reads or writes `proofpath` tables. It uses Supabase only for sign-in, MFA and
 -- uploading a file to a signed URL the API issued. So instead of per-role policies, every table has

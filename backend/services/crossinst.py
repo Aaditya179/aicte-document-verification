@@ -57,7 +57,7 @@ class CrossData:
 
 def load(application: dict) -> CrossData:
     """Five queries at once. At prototype scale every other claim is read and compared in Python; a large
-    deployment would push the matching into SQL (see ASSUMPTIONS.md)."""
+    deployment would push the matching into SQL (CLAUDE.md, assumption A22)."""
     names = sorted({f for _, f in IDENTIFIER_KINDS})
     apps, docs, faculty, media, fields, institutions = parallel(
         lambda: db.table("applications").select("id,code,institution_id,workflow_status")

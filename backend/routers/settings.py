@@ -4,7 +4,7 @@ weights, checklists, document types, extraction templates and the signature trus
 adapter mode is in routers/verification.py.
 
 These are configuration, not rules: they are not versioned, so every change is written to the audit
-trail with what it was before, what it became and why (ASSUMPTIONS.md).
+trail with what it was before, what it became and why (CLAUDE.md, Part 2).
 """
 import re
 import datetime as dt

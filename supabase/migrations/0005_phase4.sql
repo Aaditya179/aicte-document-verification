@@ -2,7 +2,7 @@
 --
 -- R-REG-01 switches on check C15 (REGISTRY_MISMATCH): the latest issuer-registry answer for a current
 -- document gave values that differ from the values read from it. The spec's check catalogue has C15 but
--- its rule list has no rule for it (ASSUMPTIONS.md A30). The issuer registry is a MOCK.
+-- its rule list has no rule for it (CLAUDE.md, assumption A30). The issuer registry is a MOCK.
 -- Illustrative demo rule, not an official AICTE rule.
 
 insert into proofpath.rules (rule_code, version, title, description, check_type, params, severity, status, effective_from)

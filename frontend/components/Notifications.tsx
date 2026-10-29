@@ -7,7 +7,7 @@ import { fetchApi } from '@/lib/api';
 import type { AppNotification, Role } from '@/lib/types';
 import { formatDateTime } from './ui';
 
-const POLL_MS = 60_000;   // notifications are polled, not pushed (ASSUMPTIONS.md D4)
+const POLL_MS = 60_000;   // notifications are polled, not pushed (CLAUDE.md, assumption D4)
 
 function hrefFor(n: AppNotification, role: Role) {
   if (n.ref_type === 'rule' && n.ref_id) return `/admin/rules/${n.ref_id}`;

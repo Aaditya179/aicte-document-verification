@@ -1,6 +1,6 @@
 """
 Who may see which application. The service role bypasses row-level security, so these checks are
-the only lock on the data (build spec 5.2, ASSUMPTIONS.md D4) and every route that loads an
+the only lock on the data (build spec 5.2, CLAUDE.md, assumption D4) and every route that loads an
 application or document goes through them.
 
 An institution sees only its own institution's applications. Anything else reads as 404, so an

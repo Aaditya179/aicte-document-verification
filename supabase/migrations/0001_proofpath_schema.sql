@@ -1,4 +1,4 @@
--- ProofPath AI (SIH26261): schema. Build spec section 5, adapted as recorded in ASSUMPTIONS.md.
+-- ProofPath AI (SIH26261): schema. Build spec section 5, adapted as recorded in CLAUDE.md, Part 2.
 --
 -- ProofPath shares its Supabase project with Nirikshan (SIH26262). Everything ProofPath owns lives in
 -- the `proofpath` schema instead of `pp_`-prefixed tables in `public`, so nothing here can clash with

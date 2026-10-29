@@ -92,7 +92,7 @@ def get_rule(rule_id: str, user: AuthenticatedUser = Depends(require_role(ADMIN)
 @router.post("", status_code=201)
 def create_version(body: NewVersion, user: AuthenticatedUser = Depends(require_role(ADMIN))):
     """A draft as the next version of an existing rule. New rule codes are not created here: each code
-    switches on a check that exists in code (ASSUMPTIONS.md)."""
+    switches on a check that exists in code (CLAUDE.md, Part 2)."""
     base = _call(service.get, body.from_rule_id)
     rule = _call(service.new_version, base, body.model_dump(exclude={"from_rule_id", "reason"}, exclude_none=True), user.id)
     _record(user, "rule_drafted", rule, from_version=base["version"], params=rule.get("params"), reason=body.reason.strip())
