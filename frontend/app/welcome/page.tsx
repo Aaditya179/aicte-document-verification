@@ -4,22 +4,21 @@ import Brand from '@/components/Brand';
 import DemoAccounts from '@/components/DemoAccounts';
 import ServerWakeNote from '@/components/ServerWakeNote';
 
-/** Two documents of one application disagree; the specimen shows how a finding cites both. */
-function Specimen() {
+const DEMO_TEXT = 'Documents are uploaded one by one; each passes the file check and is read. The four statuses are shown separately, and the final decision stays Pending (authorised AICTE official).';
+
+/** An 8-second loop of an application being prepared. Muted and without controls, so it reads as an
+ *  illustration; with reduced motion asked for, the last frame is shown still instead. */
+function Demo() {
   return (
-    <figure aria-label="Example: a finding that cites two documents" className="relative">
-      <div className="ruled rounded-sheet border border-rule bg-sheet px-6 pb-3 pt-4">
-        <p className="text-xs text-ink-2">Approval certificate, page 1</p>
-        <p className="mt-3 leading-8">Certificate number: AICTE-SYN/2025/77810</p>
-        <p className="leading-8">Valid until: <span className="mark font-semibold">31 March 2028</span></p>
+    <figure className="relative">
+      <div className="aspect-video overflow-hidden rounded-sheet border border-rule bg-sheet">
+        <video className="h-full w-full object-cover motion-reduce:hidden" src="/media/upload-loop.mp4" poster="/media/upload-loop-poster.jpg"
+          autoPlay muted loop playsInline preload="auto" aria-label={DEMO_TEXT} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="hidden h-full w-full object-cover motion-reduce:block" src="/media/upload-loop-poster.jpg" alt={DEMO_TEXT} />
       </div>
-      <div className="ruled relative -mt-2 ml-6 rounded-sheet border border-rule bg-sheet px-6 pb-3 pt-4 sm:ml-12">
-        <p className="text-xs text-ink-2">Application form, page 1</p>
-        <p className="mt-3 leading-8">Institution code: INST-1001</p>
-        <p className="leading-8">Approval valid until: <span className="mark font-semibold">31 March 2029</span></p>
-      </div>
-      <figcaption className="ml-6 mt-4 border-l-2 border-conflict pl-3 text-sm text-conflict sm:ml-12">
-        The two dates differ by one year. Candidate for review under rule R-PAIR-01, version 1.
+      <figcaption className="mt-4 border-l-2 border-ink pl-3 text-sm text-ink-2">
+        Each file is checked and read as it arrives. Four separate statuses, never one score, and the decision stays with the authorised AICTE official.
       </figcaption>
     </figure>
   );
@@ -59,7 +58,7 @@ export default function WelcomePage() {
             such as the issuer registry, is labelled MOCK.
           </p>
         </div>
-        <Specimen />
+        <Demo />
       </section>
 
       <section className="border-t border-rule bg-sheet">
