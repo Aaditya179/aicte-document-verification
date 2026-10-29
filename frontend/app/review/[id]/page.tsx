@@ -22,6 +22,7 @@ function howRead(f: ExtractedField) {
   if (f.source_method === 'OCR') return f.confidence != null ? `OCR, ${Math.round(f.confidence * 100)}% confidence` : 'OCR';
   if (f.source_method === 'PDF_TEXT') return 'PDF text';
   if (f.source_method === 'MANUAL') return 'Entered by a reviewer';
+  if (f.source_method === 'AI_SUGGESTED') return 'Suggested by AI';
   return '—';
 }
 

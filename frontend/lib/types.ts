@@ -80,7 +80,7 @@ export interface ExtractedField {
   original_value: string | null;
   value_type: string;
   page_number: number | null;
-  source_method: 'PDF_TEXT' | 'OCR' | 'MANUAL' | null;
+  source_method: 'PDF_TEXT' | 'OCR' | 'MANUAL' | 'AI_SUGGESTED' | null;
   confidence: number | null;
   review_state: 'auto' | 'needs_confirmation' | 'confirmed' | 'corrected';
   review_reason: string | null;

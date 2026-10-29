@@ -20,7 +20,8 @@ function ValuesRead({ doc }: { doc: DocumentRow }) {
   if (error) return <p className="text-xs text-conflict">{error}</p>;
   if (!values) return <p className="text-xs text-ink-2">Loading the values read…</p>;
   if (values.fields.length === 0 && values.faculty.length === 0) return <p className="text-xs text-ink-2">No values are read from this kind of document.</p>;
-  const unclear = values.fields.filter((f) => f.review_state === 'needs_confirmation' || !f.original_value);
+  const suggested = values.fields.filter((f) => f.source_method === 'AI_SUGGESTED' && f.review_state === 'needs_confirmation');
+  const unclear = values.fields.filter((f) => (f.review_state === 'needs_confirmation' || !f.original_value) && !suggested.includes(f));
   return (
     <div className="space-y-2">
       <dl className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
@@ -30,12 +31,20 @@ function ValuesRead({ doc }: { doc: DocumentRow }) {
             <dd>
               {f.original_value ? <Mark>{f.original_value}</Mark> : <span className="font-semibold text-conflict">not found</span>}
               {f.page_number && <span className="ml-1 text-xs text-ink-2">page {f.page_number}</span>}
-              {f.review_state === 'needs_confirmation' && <span className="ml-1"><Tag tone="pending">Unclear</Tag></span>}
+              {f.review_state === 'needs_confirmation' && (
+                <span className="ml-1"><Tag tone="pending">{f.source_method === 'AI_SUGGESTED' ? 'Suggested by AI' : 'Unclear'}</Tag></span>
+              )}
             </dd>
           </div>
         ))}
       </dl>
       {values.faculty.length > 0 && <p className="text-sm text-ink-2">{values.faculty.length} faculty members read from the list.</p>}
+      {suggested.length > 0 && (
+        <p className="text-xs text-pending">
+          {suggested.length === 1 ? 'One value was' : `${suggested.length} values were`} found by AI in the text, not by its usual label.
+          A reviewer confirms {suggested.length === 1 ? 'it' : 'them'} against the page before {suggested.length === 1 ? 'it is' : 'they are'} compared.
+        </p>
+      )}
       {unclear.length > 0 && (
         <p className="text-xs text-pending">
           {unclear.length === 1 ? 'One value' : `${unclear.length} values`} could not be read clearly. A clearer copy helps; dates read best with the month in words.

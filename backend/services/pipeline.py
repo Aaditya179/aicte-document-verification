@@ -21,7 +21,7 @@ from typing import Optional
 from core.config import settings
 from core.db import db
 from core.security import AuthenticatedUser
-from services import audit, extraction, forensics
+from services import audit, extraction, forensics, suggest
 
 logger = logging.getLogger("proofpath.pipeline")
 
@@ -189,9 +189,19 @@ def process_document(document_id: str) -> None:
         else:
             pages = extraction.read_pages(data, document["mime"])
             templates = db.fetch_all("extraction_templates", doc_type=document["doc_type"])
-            fields = extraction.extract_fields(pages, templates, _min_confidence())
+            read = extraction.extract_fields(pages, templates, _min_confidence())
+            fields = suggest.fill_missing(pages, templates, read, doc_type.get("label") or document["doc_type"])
             if fields:
-                db.table("extracted_fields").insert([{**f, "document_id": document_id} for f in fields]).execute()
+                try:
+                    db.table("extracted_fields").insert([{**f, "document_id": document_id} for f in fields]).execute()
+                except Exception:
+                    if fields is read:
+                        raise
+                    # Migration 0008 not applied yet (AI_SUGGESTED refused): store the reading without suggestions
+                    logger.exception("Storing AI suggestions failed for %s; storing the values read without them", document_id)
+                    fields = read
+                    db.table("extracted_fields").insert([{**f, "document_id": document_id} for f in fields]).execute()
+            counts["ai_suggested"] = sum(f.get("source_method") == suggest.SOURCE for f in fields)
             counts["fields"] = len(fields)
             counts["needs_confirmation"] = sum(f["review_state"] == "needs_confirmation" for f in fields)
             if document["doc_type"] == "faculty_list":
