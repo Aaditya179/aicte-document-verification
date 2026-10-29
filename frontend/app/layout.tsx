@@ -18,15 +18,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={`${martel.variable} ${mukta.variable} h-full`}>
       <body className="flex min-h-full flex-col bg-paper text-ink">
-        <p className="border-b border-rule bg-sheet px-4 py-1.5 text-center text-xs text-ink-2">
-          Prototype demo. All institutions, people, documents and photos are fictional. Rules are illustrative, not official AICTE rules.
-        </p>
         <Suspense fallback={<div className="h-14" />}>
           <Navbar />
         </Suspense>
         <main className="flex-1">{children}</main>
-        <footer className="border-t border-rule px-4 py-4 text-center text-xs text-ink-2">
-          Decision support only. Final decision: Pending (authorised AICTE official).
+        {/* The spec's prototype notice (section 13), kept on every page in the footer rather than a strip on top */}
+        <footer className="space-y-1 border-t border-rule px-4 py-4 text-center text-xs text-ink-2">
+          <p>Decision support only. Final decision: Pending (authorised AICTE official).</p>
+          <p>Prototype demo. All institutions, people, documents and photos are fictional. Rules are illustrative, not official AICTE rules.</p>
         </footer>
       </body>
     </html>
