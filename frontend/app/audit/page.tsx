@@ -49,6 +49,8 @@ const EVENT_LABELS: Record<string, string> = {
   rule_activated: 'Rule activated',
   rule_retired: 'Rule retired',
   setting_changed: 'Setting changed',
+  explanation_drafted: 'Explanation drafted',
+  clause_added: 'Regulation clause added',
 };
 
 function eventNote(e: AuditEvent): string {

@@ -563,3 +563,23 @@ export interface PreflightResult {
   items: PreflightItem[];
   stored: false;
 }
+
+// Regulation clauses behind a finding (ASSUMPTIONS A41). The seeded clauses are illustrative, not AICTE text.
+export interface RegulationClause {
+  id: string;
+  clause_ref: string;
+  source: string;
+  heading: string;
+  body: string;
+  rule_codes: string[];
+  is_illustrative: boolean;
+  /** How it was found for a finding: named by the rule, or by keyword search */
+  matched_by?: 'rule' | 'search' | null;
+  created_at?: string | null;
+}
+
+export interface FindingClauses {
+  rule: { rule_code: string; version: number; title: string | null; description: string | null; source_reference: string | null; clause: string | null; note: string | null } | null;
+  clauses: RegulationClause[];
+  explanation?: { text: string; clause_refs: string[]; by: 'llm' | 'rules' };
+}

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { fetchApi } from '@/lib/api';
-import { humanize, type AdminSettings, type ExtractionTemplate, type RegistryMode, type RegistrySetting } from '@/lib/types';
+import { humanize, type AdminSettings, type ExtractionTemplate, type RegistryMode, type RegistrySetting, type RegulationClause } from '@/lib/types';
 import { Loading, Notice, PageShell, Tag, btnQuiet, btnSecondary, formatDate, input, label, td, th, useMe } from '@/components/ui';
 
 const MODE_TEXT: Record<RegistryMode, { title: string; text: string }> = {
@@ -322,6 +322,69 @@ function Registry({ ctx }: { ctx: Ctx }) {
   );
 }
 
+const NEW_CLAUSE = { clause_ref: '', heading: '', body: '', source: '', rule_codes: '', is_illustrative: true };
+
+function Clauses({ ctx }: { ctx: Ctx }) {
+  const [clauses, setClauses] = useState<RegulationClause[] | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [form, setForm] = useState(NEW_CLAUSE);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    fetchApi<RegulationClause[]>('/admin/clauses').then(({ data, error }) => (data ? setClauses(data) : setProblem(error)));
+  }, [version]);
+  const set = (k: keyof typeof NEW_CLAUSE) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
+  const complete = form.clause_ref.trim().length >= 2 && form.heading.trim().length >= 3 && form.source.trim().length >= 3 && form.body.trim().length >= 20;
+  const add = async () => {
+    const rule_codes = form.rule_codes.split(',').map((c) => c.trim()).filter(Boolean);
+    if (await save(ctx, '/admin/clauses', { ...form, rule_codes }, `Clause ${form.clause_ref.trim()} added. Findings under its rules show it from now on.`, 'POST')) {
+      setForm(NEW_CLAUSE);
+      setVersion((v) => v + 1);
+    }
+  };
+  return (
+    <Section id="clauses" title="Regulation clauses"
+      text="The clauses a reviewer sees under Why this rule on each finding. Those linked to a rule come first, then the closest by keyword search. Clauses are added, not edited.">
+      {problem && <Notice kind="error">{problem}</Notice>}
+      {!clauses && !problem && <Loading what="Loading clauses" />}
+      {clauses && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] border-collapse">
+            <thead><tr><th className={th}>Clause</th><th className={th}>Text</th><th className={th}>Linked rules</th></tr></thead>
+            <tbody>
+              {clauses.map((c) => (
+                <tr key={c.id}>
+                  <td className={`${td} align-top`}>
+                    <span className="font-semibold">{c.clause_ref}</span>
+                    {c.is_illustrative && <span className="ml-2"><Tag>Illustrative</Tag></span>}
+                    <span className="block text-xs text-ink-2">{c.source}</span>
+                  </td>
+                  <td className={`${td} align-top`}><span className="font-semibold">{c.heading}.</span> {c.body}</td>
+                  <td className={`${td} align-top`}>{c.rule_codes.join(', ') || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {ctx.canEdit && (
+        <fieldset className="grid gap-3 sm:grid-cols-2">
+          <legend className="mb-2 font-semibold">Add a clause</legend>
+          <div><label htmlFor="cl-ref" className={label}>Reference</label><input id="cl-ref" className={input} value={form.clause_ref} onChange={set('clause_ref')} placeholder="for example ILL-6.1" /></div>
+          <div><label htmlFor="cl-heading" className={label}>Heading</label><input id="cl-heading" className={input} value={form.heading} onChange={set('heading')} /></div>
+          <div className="sm:col-span-2"><label htmlFor="cl-body" className={label}>Text</label><textarea id="cl-body" rows={3} className={input} value={form.body} onChange={set('body')} /></div>
+          <div><label htmlFor="cl-source" className={label}>Source</label><input id="cl-source" className={input} value={form.source} onChange={set('source')} placeholder="where the text comes from" /></div>
+          <div><label htmlFor="cl-rules" className={label}>Linked rules, separated by commas</label><input id="cl-rules" className={input} value={form.rule_codes} onChange={set('rule_codes')} placeholder="for example R-EXP-01" /></div>
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" checked={form.is_illustrative} onChange={(e) => setForm({ ...form, is_illustrative: e.target.checked })} />
+            Illustrative text, not quoted from an official regulation
+          </label>
+          <div className="sm:col-span-2"><button className={btnSecondary} disabled={!ready(ctx) || !complete} onClick={add}>Add clause</button></div>
+        </fieldset>
+      )}
+    </Section>
+  );
+}
+
 export default function SettingsPage() {
   const { me } = useMe();
   const [settings, setSettings] = useState<AdminSettings | null>(null);
@@ -346,7 +409,7 @@ export default function SettingsPage() {
     <PageShell
       wide
       title="Settings"
-      description="The as-of date, queue weights, checklists, document types, reading patterns, the signature trust store and the MOCK issuer registry. Every change is kept in the audit trail."
+      description="The as-of date, queue weights, checklists, document types, reading patterns, the signature trust store, the MOCK issuer registry and the regulation clauses. Every change is kept in the audit trail."
     >
       {error && <div className="mb-4"><Notice kind="error">{error}</Notice></div>}
       {!settings && !error && <Loading what="Loading settings" />}
@@ -360,6 +423,7 @@ export default function SettingsPage() {
             <TrustStore s={settings} ctx={ctx} />
             <Templates s={settings} ctx={ctx} />
             <Registry ctx={ctx} />
+            <Clauses ctx={ctx} />
           </div>
           <aside className="order-1 lg:order-2">
             <div className="space-y-3 rounded-sheet border border-rule bg-sheet p-5 lg:sticky lg:top-6">

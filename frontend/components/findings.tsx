@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { fetchApi } from '@/lib/api';
 import {
   FINDING_STATUS_LABEL, SEVERITY_LABEL, humanize,
-  type AuditEvent, type ExtractedField, type Finding, type FindingEvidence, type Priority, type ReviewActionKind, type StatusCard,
+  type AuditEvent, type ExtractedField, type Finding, type FindingClauses, type FindingEvidence, type Priority, type ReviewActionKind, type StatusCard,
 } from '@/lib/types';
 import { documentLink } from './documents';
 import { Empty, Loading, Mark, Notice, Tag, btnQuiet, btnSecondary, formatDate, formatDateInWords, formatDateTime, input, label, sheet, td, th } from './ui';
@@ -364,6 +364,88 @@ function ActionHistory({ finding }: { finding: Finding }) {
   );
 }
 
+/** The clauses the finding's rule rests on, and a draft explanation the reviewer asks for. Loaded on opening. */
+function WhyThisRule({ finding }: { finding: Finding }) {
+  const [open, setOpen] = useState(false);
+  const [found, setFound] = useState<FindingClauses | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
+
+  useEffect(() => {
+    if (!open || found) return;
+    fetchApi<FindingClauses>(`/findings/${finding.id}/clauses`).then(({ data, error }) => (data ? setFound(data) : setError(error)));
+  }, [open, found, finding.id]);
+
+  const draft = async () => {
+    setDrafting(true);
+    const { data, error } = await fetchApi<FindingClauses>(`/findings/${finding.id}/explanation`, { method: 'POST' });
+    setDrafting(false);
+    if (data) setFound(data); else setError(error ?? 'No draft');
+  };
+
+  const explanation = found?.explanation;
+  return (
+    <div>
+      <button className={btnQuiet} aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? 'Hide the rule and its clauses' : 'Why this rule'}
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3 border-l-2 border-rule-strong pl-4">
+          {error && <Notice kind="error">{error}</Notice>}
+          {!found && !error && <Loading what="Finding the clauses" />}
+          {found && (
+            <>
+              {found.rule && (
+                <p className="text-sm">
+                  <span className="font-semibold">{found.rule.title ?? found.rule.rule_code}</span>
+                  {found.rule.description && <span className="text-ink-2">: {found.rule.description}</span>}
+                </p>
+              )}
+              {found.clauses.length === 0 && <p className="text-sm text-ink-2">No clause in the library matches this rule yet.</p>}
+              {found.clauses.map((c) => (
+                <blockquote key={c.id} className="space-y-1 text-sm">
+                  <p className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{c.clause_ref}, {c.heading}</span>
+                    {c.is_illustrative && <Tag>Illustrative</Tag>}
+                  </p>
+                  <p>{c.body}</p>
+                  <p className="text-xs text-ink-2">
+                    {c.source}. {c.matched_by === 'rule' ? `Linked to rule ${finding.rule_code}.` : 'Found by keyword search; it may be related rather than the basis of the rule.'}
+                  </p>
+                </blockquote>
+              ))}
+              {found.clauses.some((c) => c.is_illustrative) && (
+                <p className="text-xs text-ink-2">Illustrative clauses were written for this prototype. They are not official AICTE text.</p>
+              )}
+              {explanation ? (
+                <div className="space-y-1 rounded-sheet border border-rule bg-sheet p-3">
+                  <p className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                    <Tag tone="pending">Draft</Tag>
+                    {explanation.by === 'llm' ? 'Suggested by AI' : 'Built from the record, without AI'}
+                  </p>
+                  <p className="text-sm">{explanation.text}</p>
+                  <p className="text-xs text-ink-2">
+                    {explanation.by === 'llm'
+                      ? 'Written only from this finding, its evidence and the clauses above; every number in it was checked against them. '
+                      : ''}
+                    It explains the finding and is not a conclusion. It is not saved on the finding.
+                  </p>
+                </div>
+              ) : (
+                found.clauses.length > 0 && (
+                  <button className={btnSecondary} disabled={drafting} onClick={draft}>
+                    {drafting ? 'Drafting…' : 'Draft an explanation'}
+                  </button>
+                )
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const STATUS_TAG = {
   open: 'conflict', evidence_requested: 'pending', resolved: 'ok', dismissed: 'ok', auto_closed: 'neutral',
 } as const;
@@ -394,6 +476,7 @@ export function FindingCard({ finding, docLabel, onCite, onChange, onReviewed, c
         <Link href={`/review/${finding.related_application_id}`} className={btnQuiet}>Open the other application</Link>
       )}
       {canAct && unresolved && finding.finding_type === 'FIELD_NEEDS_CONFIRMATION' && <FindingField finding={finding} onReviewed={onReviewed} />}
+      {finding.rule_code && <WhyThisRule finding={finding} />}
       <ActionHistory finding={finding} />
       {canAct && unresolved && <ActionForm finding={finding} onDone={onChange} />}
     </article>
@@ -417,6 +500,7 @@ const EVENT_LABEL: Record<string, string> = {
   field_confirmed: 'Value confirmed',
   field_corrected: 'Value corrected',
   evidence_request_fulfilled: 'Institution answered a request',
+  explanation_drafted: 'Explanation drafted',
 };
 
 function eventNote(e: AuditEvent): string {
@@ -428,6 +512,7 @@ function eventNote(e: AuditEvent): string {
   if (e.event_type === 'evidence_request_fulfilled' && typeof d.note === 'string') return d.note;
   if (e.event_type === 'rooms_saved') return `${d.rooms ?? 0} rooms, ${d.total_sqm ?? 0} sq m`;
   if (e.event_type === 'field_corrected') return `${String(d.from ?? 'not read')} to ${String(d.to)}: ${String(d.reason ?? '')}`;
+  if (e.event_type === 'explanation_drafted') return `${d.by === 'llm' ? 'Suggested by AI' : 'From the record, without AI'}; clauses ${(d.clause_refs as string[] | undefined)?.join(', ') || 'none'}`;
   if (typeof d.reason === 'string') return d.reason;
   if (typeof d.original_name === 'string') return d.original_name;
   return '';
